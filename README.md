@@ -6,6 +6,20 @@ copy and no backend.
 
 > **Demonstration, education, and research use only. Not intended for diagnosis or clinical decision-making.**
 
+## Screenshots
+
+**Multi-series MR study in 2D**
+
+![MRI-DIR synthetic T1 MR study in the 2D viewer](docs/images/mri-dir-2d.png)
+
+**Full screen CT MPR**
+
+![Visible Human abdominal CT in the expanded MPR viewer with axial, coronal, and sagittal planes](docs/images/visible-human-ct-mpr-expanded.png)
+
+**3D CT reconstruction**
+
+![Visible Human abdominal CT rendered in the 3D viewer](docs/images/visible-human-ct-3d.png)
+
 ## Local demo
 
 Open `index.html` directly. The project and included studies work with
