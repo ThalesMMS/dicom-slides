@@ -1,7 +1,7 @@
 {
   "format": "dicom-slide-volume/1",
   "caseId": "visible-human-abdomen-ct--normal-ct",
-  "title": "TC normal (pré-congelamento)",
+  "title": "Normal CT (before freezing)",
   "modality": "CT",
   "dimensions": {
     "columns": 256,
@@ -144,17 +144,17 @@
       "width": 400.0
     },
     "soft": {
-      "label": "Partes moles",
+      "label": "Soft tissue",
       "center": 40.0,
       "width": 400.0
     },
     "lung": {
-      "label": "Pulmão",
+      "label": "Lung",
       "center": -600.0,
       "width": 1500.0
     },
     "bone": {
-      "label": "Osso",
+      "label": "Bone",
       "center": 500.0,
       "width": 2000.0
     }

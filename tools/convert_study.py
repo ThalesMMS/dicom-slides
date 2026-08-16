@@ -172,9 +172,9 @@ def package_study(input_path: Path, output_dir: Path, study_id: str, title: str 
             for position, (series_uid, series_headers) in enumerate(sorted(grouped.items(), key=series_sort_key), start=1):
                 first_header = series_headers[0]
                 number_text = safe_text(first_header, "seriesNumber") or str(position)
-                description = safe_text(first_header, "seriesDescription") or f"Série {number_text}"
+                description = safe_text(first_header, "seriesDescription") or f"Series {number_text}"
                 uid_suffix = hashlib.sha1(series_uid.encode("utf-8")).hexdigest()[:7]
-                series_id = f"series-{slugify(number_text, str(position))}-{slugify(description, 'sem-descricao')}-{uid_suffix}"
+                series_id = f"series-{slugify(number_text, str(position))}-{slugify(description, 'no-description')}-{uid_suffix}"
                 case_id = f"{study_id}--{series_id}"
                 series_output = series_root / series_id
 

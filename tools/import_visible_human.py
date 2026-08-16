@@ -233,8 +233,8 @@ def package_study(
         series_root = package_root / "series"
         series_root.mkdir(parents=True)
         specifications = [
-            ("normal-ct", "TC normal (pré-congelamento)", "1", "normalCT", normal_images),
-            ("frozen-ct", "TC após congelamento", "2", "frozenCT", frozen_images),
+            ("normal-ct", "Normal CT (before freezing)", "1", "normalCT", normal_images),
+            ("frozen-ct", "CT after freezing", "2", "frozenCT", frozen_images),
         ]
         entries = []
         for series_id, title, number, kind, images in specifications:
@@ -266,7 +266,7 @@ def package_study(
         study = {
             "format": "dicom-slide-study/1",
             "studyId": STUDY_ID,
-            "title": "Visible Human Male — TC abdominal",
+            "title": "Visible Human Male — abdominal CT",
             "seriesCount": len(entries),
             "series": entries,
             "source": {

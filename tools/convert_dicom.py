@@ -92,9 +92,9 @@ DICOM_ENCODINGS = {
 
 GENERIC_CT_PRESETS = {
     "dicom": {"label": "DICOM", "center": 40.0, "width": 400.0},
-    "soft": {"label": "Partes moles", "center": 40.0, "width": 400.0},
-    "lung": {"label": "Pulmão", "center": -600.0, "width": 1500.0},
-    "bone": {"label": "Osso", "center": 500.0, "width": 2000.0},
+    "soft": {"label": "Soft tissue", "center": 40.0, "width": 400.0},
+    "lung": {"label": "Lung", "center": -600.0, "width": 1500.0},
+    "bone": {"label": "Bone", "center": 500.0, "width": 2000.0},
 }
 
 JPEG2000_TRANSFER_SYNTAXES = {
@@ -522,7 +522,7 @@ def presets_for_series(first: dict, minimum: int, maximum: int) -> tuple[dict, d
     if safe_text(first, "modality").upper() == "CT":
         presets.update({key: dict(value) for key, value in GENERIC_CT_PRESETS.items() if key != "dicom"})
     else:
-        presets["full"] = {"label": "Faixa completa", "center": range_center, "width": range_width}
+        presets["full"] = {"label": "Full range", "center": range_center, "width": range_width}
     return {"center": dicom_center, "width": dicom_width}, presets
 
 

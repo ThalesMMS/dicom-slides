@@ -197,7 +197,7 @@ def main() -> None:
         }
     full_width = max(1.0, float(maximum - minimum))
     manifest.setdefault("presets", {})["full"] = {
-        "label": "Faixa completa",
+        "label": "Full range",
         "center": float(minimum) + full_width / 2.0,
         "width": full_width,
     }

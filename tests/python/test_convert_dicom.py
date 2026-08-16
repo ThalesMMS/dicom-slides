@@ -154,6 +154,27 @@ class ImplicitVrDicomTests(unittest.TestCase):
             self.assertEqual(list(pixels), [-100, 200])
 
 
+class PresetLabelTests(unittest.TestCase):
+    def test_uses_english_authored_preset_labels(self) -> None:
+        from tools import convert_dicom
+
+        _, ct_presets = convert_dicom.presets_for_series(
+            {"modality": "CT", "windowCenter": 40, "windowWidth": 400},
+            -1024,
+            2000,
+        )
+        self.assertEqual(ct_presets["soft"]["label"], "Soft tissue")
+        self.assertEqual(ct_presets["lung"]["label"], "Lung")
+        self.assertEqual(ct_presets["bone"]["label"], "Bone")
+
+        _, mr_presets = convert_dicom.presets_for_series(
+            {"modality": "MR", "windowCenter": 100, "windowWidth": 200},
+            0,
+            1000,
+        )
+        self.assertEqual(mr_presets["full"]["label"], "Full range")
+
+
 class EncapsulatedPixelDataTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory(prefix="dicom-slide-j2k-test-")

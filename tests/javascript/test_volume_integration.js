@@ -349,6 +349,7 @@ for (const manifestPath of [
 
 const mriDirStudyPath = path.join(root, "exams/library/mri-dir-t1-mr/study.json");
 const mriDirStudy = JSON.parse(fs.readFileSync(mriDirStudyPath, "utf8"));
+assert.equal(mriDirStudy.title, "MRI-DIR — multi-series synthetic T1 MR");
 assert.deepEqual(
   mriDirStudy.series.map((series) => String(series.number)),
   ["1", "2", "3", "4"],
@@ -384,5 +385,10 @@ const visibleHumanStudy = JSON.parse(fs.readFileSync(
 ));
 assert.deepEqual(visibleHumanStudy.series.map((series) => series.slices), [100, 301]);
 assert.equal(visibleHumanStudy.source.attribution, "Courtesy of the U.S. National Library of Medicine");
+assert.equal(visibleHumanStudy.title, "Visible Human Male — abdominal CT");
+assert.deepEqual(
+  visibleHumanStudy.series.map((series) => series.title),
+  ["Normal CT (before freezing)", "CT after freezing"]
+);
 
 console.log("OK: multi-series volume integration, tools, transfer functions, geometry, and downsampling passed");

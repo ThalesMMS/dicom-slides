@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sys
 import struct
 import tempfile
@@ -28,6 +29,18 @@ class StudyValidationTests(unittest.TestCase):
             import_visible_human.package_study(images, images, output, downsample=2, chunk_size=1)
 
             validate_project.validate_study(output)
+            study = json.loads((output / "study.json").read_text(encoding="utf-8"))
+            self.assertEqual(study["title"], "Visible Human Male — abdominal CT")
+            self.assertEqual(
+                [series["title"] for series in study["series"]],
+                ["Normal CT (before freezing)", "CT after freezing"],
+            )
+            normal_manifest = json.loads(
+                (output / "series" / "normal-ct" / "manifest.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(normal_manifest["presets"]["soft"]["label"], "Soft tissue")
+            self.assertEqual(normal_manifest["presets"]["lung"]["label"], "Lung")
+            self.assertEqual(normal_manifest["presets"]["bone"]["label"], "Bone")
 
 
 if __name__ == "__main__":

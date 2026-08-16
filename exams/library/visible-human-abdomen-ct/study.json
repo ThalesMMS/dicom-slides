@@ -1,14 +1,14 @@
 {
   "format": "dicom-slide-study/1",
   "studyId": "visible-human-abdomen-ct",
-  "title": "Visible Human Male — TC abdominal",
+  "title": "Visible Human Male — abdominal CT",
   "seriesCount": 2,
   "series": [
     {
       "id": "normal-ct",
       "caseId": "visible-human-abdomen-ct--normal-ct",
       "number": "1",
-      "title": "TC normal (pré-congelamento)",
+      "title": "Normal CT (before freezing)",
       "modality": "CT",
       "slices": 100,
       "rows": 256,
@@ -20,7 +20,7 @@
       "id": "frozen-ct",
       "caseId": "visible-human-abdomen-ct--frozen-ct",
       "number": "2",
-      "title": "TC após congelamento",
+      "title": "CT after freezing",
       "modality": "CT",
       "slices": 301,
       "rows": 256,
