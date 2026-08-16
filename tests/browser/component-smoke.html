@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>DICOM Slide component smoke test</title>
+  <style>html,body,dicom-study-viewer{display:block;width:100%;height:100%;margin:0;overflow:hidden;background:#000}</style>
+</head>
+<body>
+  <script src="../../runtime/dicom-slide.js"></script>
+  <script src="../../runtime/dicom-slide.js"></script>
+  <dicom-study-viewer
+    study-id="mri-dir-t1-mr"
+    src="../../exams/library/mri-dir-t1-mr/study.js"
+    series="1"></dicom-study-viewer>
+  <script>
+    window.dicomReadyCount = 0;
+    document.querySelector("dicom-study-viewer").addEventListener("dicom-ready", () => {
+      window.dicomReadyCount += 1;
+    });
+  </script>
+</body>
+</html>

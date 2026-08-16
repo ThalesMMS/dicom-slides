@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>DICOM Slide</title>
+  <link rel="stylesheet" href="../../shared/slide.css">
+</head>
+<body>
+  <main class="slide active" aria-label="Introdução ao DICOM Slide">
+    <div class="slide-inner hero">
+      <div class="hero-copy">
+        <span class="eyebrow">DICOM Slide + dicom-volume</span>
+        <h1>2D, MPR e volume 3D no mesmo viewer</h1>
+        <p>O viewer usa chunks locais do <code>dicom-slide</code>. Os botões <strong>MPR</strong> e <strong>3D</strong> montam o volume da série ativa somente quando necessários.</p>
+        <div class="pill-row">
+          <span class="pill">2 volumes funcionais</span>
+          <span class="pill">457 imagens</span>
+          <span class="pill">MPR triplanar</span>
+          <span class="pill">Raycasting WebGL2</span>
+          <span class="pill">Zero dependências em runtime</span>
+        </div>
+        <p class="small hero-help">Use ←/→ para trocar de slide. No viewer: M abre MPR, V abre 3D e Esc retorna à pilha 2D.</p>
+      </div>
+      <div class="hero-poster">
+        <img src="../../../exams/library/visible-human-abdomen-ct/poster.png" alt="Corte axial da TC abdominal do Visible Human Male">
+      </div>
+    </div>
+  </main>
+  <script src="../../shared/slide-bridge.js"></script>
+</body>
+</html>

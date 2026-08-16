@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Iframe adapter host test</title>
+  <style>html,body,iframe{display:block;width:100%;height:100%;margin:0;border:0}</style>
+</head>
+<body>
+  <iframe id="viewer" title="DICOM iframe adapter"></iframe>
+  <script>
+    const viewer = document.getElementById("viewer");
+    const source = new URL("../../runtime/iframe/index.html", location.href);
+    source.searchParams.set("study-id", "mri-dir-t1-mr");
+    source.searchParams.set("study", "../../exams/library/mri-dir-t1-mr/study.js");
+    source.searchParams.set("series", "1");
+    const targetOrigin = location.protocol === "file:" ? "*" : location.origin;
+    if (targetOrigin !== "*") source.searchParams.set("origin", targetOrigin);
+    window.adapterMessages = [];
+    window.addEventListener("message", (event) => {
+      if (event.source === viewer.contentWindow && event.data && event.data.source === "dicom-slide-viewer") {
+        window.adapterMessages.push(event.data);
+      }
+    });
+    window.postAdapterCommand = (command, detail) => {
+      viewer.contentWindow.postMessage(Object.assign({ source: "dicom-slide-host", command }, detail), targetOrigin);
+    };
+    viewer.src = source.href;
+  </script>
+</body>
+</html>

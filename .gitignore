@@ -1,0 +1,6 @@
+.DS_Store
+__MACOSX/
+*.log
+__pycache__/
+*.py[cod]
+docs/superpowers/

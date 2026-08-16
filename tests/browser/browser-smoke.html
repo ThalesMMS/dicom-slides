@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>DICOM Slide browser smoke test</title>
+  <style>
+    html,body{width:100%;height:100%;margin:0;background:#000;color:#fff;font-family:system-ui,sans-serif;overflow:hidden}
+    #host{position:absolute;inset:0}
+    #result{position:fixed;z-index:100;left:8px;bottom:8px;max-width:70vw;padding:8px 10px;background:rgba(0,0,0,.78);font:12px ui-monospace,monospace;white-space:pre-wrap;pointer-events:none}
+  </style>
+</head>
+<body data-result="running">
+  <div id="host"></div>
+  <pre id="result">running</pre>
+  <script src="../../runtime/dicom-slide.js"></script>
+  <script>
+    (async function () {
+      const output = document.getElementById("result");
+      const params = new URLSearchParams(location.search);
+      const studyId = params.get("study-id") || "visible-human-abdomen-ct";
+      const series = params.get("series") || null;
+      const mode = params.get("final-mode") || "stack";
+      const studyUrl = studyId === "mri-dir-t1-mr"
+        ? "../../exams/library/mri-dir-t1-mr/study.js"
+        : "../../exams/library/visible-human-abdomen-ct/study.js";
+      const fail = (error) => {
+        document.body.dataset.result = "fail";
+        output.textContent = `FAIL\n${error && error.stack ? error.stack : error}`;
+        console.error(error);
+      };
+      try {
+        await DicomSlide.ready;
+        const study = new DicomSlideStudy.StudyViewer(document.getElementById("host"), {
+          studyId,
+          manifestUrl: studyUrl,
+          initialSeries: series,
+        });
+        await study.ready;
+        const viewer = study.viewer;
+        if (!viewer || !viewer.manifest) throw new Error("Viewer did not initialize");
+        if (viewer.getState().mode !== "stack") throw new Error("Initial mode is not stack");
+        await viewer.setMode("mpr");
+        await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        if (viewer.getState().mode !== "mpr") throw new Error("MPR mode did not activate");
+        if (!viewer.volumeView) throw new Error("VolumeViewer was not constructed");
+        const mprCanvases = viewer.volumeLayer.querySelectorAll('[data-volume-view="axial"] canvas,[data-volume-view="coronal"] canvas,[data-volume-view="sagittal"] canvas');
+        if (mprCanvases.length !== 3) throw new Error("MPR canvases are missing");
+        if ([...mprCanvases].some((canvas) => canvas.width < 2 || canvas.height < 2)) throw new Error("MPR canvases were not rendered");
+        await viewer.setMode("volume");
+        await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        if (viewer.getState().mode !== "volume") throw new Error("3D mode did not activate");
+        if (!viewer.volumeView.volumeRenderer) throw new Error("WebGL volume renderer was not created");
+        const renderer = viewer.volumeView.volumeRenderer;
+        if (renderer.failed) throw new Error("WebGL volume renderer fell back");
+        if (!renderer.textureDimensions || renderer.textureDimensions.some((value) => value < 2)) throw new Error("Invalid 3D texture dimensions");
+        if (mode === "mpr") await viewer.setMode("mpr");
+        else if (mode === "stack") await viewer.setMode("stack");
+        await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        const state = viewer.getState();
+        document.body.dataset.result = "pass";
+        output.textContent = JSON.stringify({
+          result: "PASS",
+          studyId,
+          finalMode: state.mode,
+          dimensions: viewer.volumeData.dimensions,
+          memoryMiB: +(viewer.volumeData.metrics.memoryBytes / 1048576).toFixed(1),
+          textureDimensions: renderer.textureDimensions,
+          textureStride: renderer.stride,
+        }, null, 2);
+      } catch (error) {
+        fail(error);
+      }
+    })();
+  </script>
+</body>
+</html>
