@@ -15,7 +15,7 @@ const ignoredFiles = new Set([
   "LICENSE",
   "exams/library/mri-dir-t1-mr/LICENSE.txt",
 ]);
-const portugueseProse = /\b(?:apresentaç(?:ão|ões)|visualizador|exames?|séries?|licenças?|projeto|dados|arquivos?|imagens?|cortes?|carregando|estudos?|matriz|geometria|origem|crédito|formato|faixa completa|partes moles|pulmão|osso|pré-congelamento|após congelamento|sem-descricao|janela|janelado|ferramenta|usuário|botão|arrasto|sombreamento|domínio|opacidade|câmera|qualidade|padrão|pesquisa realizada|resposta curta|como citar|não destinado|não|são|está|estão|começam|própri[ao]|revela|recomenda|apenas|também|mantém|devolve|continua|abaixo|acima|segue|ainda|entre|quando|onde|mesmo|sem|sintétic[ao]|multissérie|avaliação|diagnóstico|TC abdominal|TC normal)\b/iu;
+const portugueseProse = /\b(?:apresentaç(?:ão|ões)|visualizador|exames?|séries?|licenças?|projeto|dados|arquivos?|imagens?|cortes?|carregando|estudos?|matriz|geometria|origem|crédito|formato|faixa completa|partes moles|pulmão|osso|pré-congelamento|após congelamento|sem-descricao|janela|janelado|ferramenta|usuário|botão|arrasto|sombreamento|domínio|opacidade|câmera|qualidade|padrão|pesquisa realizada|resposta curta|como citar|não destinado|não|são|está|estão|começam|própri[ao]|revela|recomenda|apenas|também|mantém|devolve|continua|abaixo|acima|segue|ainda|entre|quando|onde|mesmo|sem|sintétic[ao]|multissérie|avaliação|diagnóstico|textura|TC abdominal|TC normal)\b/iu;
 
 // These definitions are detector fixtures, not prose. Exempt only their lines.
 function isDetectorDefinition(relative, line) {
