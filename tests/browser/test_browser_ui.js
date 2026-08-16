@@ -91,7 +91,7 @@ const baseUrl = process.env.DICOM_SLIDE_BASE_URL || "http://127.0.0.1:8765";
     await page.waitForFunction(() => window.adapterMessages.some((message) =>
       message.type === "error" && message.state && message.state.message === "adapter command failed"));
 
-    await page.goto(`${baseUrl}/presentation/index.html#2`, { waitUntil: "load" });
+    await page.goto(`${baseUrl}/presentation/index.html#5`, { waitUntil: "load" });
     const activeSlideFrame = page.locator('.deck-slide.active iframe');
     await activeSlideFrame.waitFor({ timeout: 3000 });
     assert.match(await activeSlideFrame.getAttribute("src"), /slides\/02-visible-human\/index\.html$/);
@@ -218,8 +218,8 @@ const baseUrl = process.env.DICOM_SLIDE_BASE_URL || "http://127.0.0.1:8765";
       preservedBefore,
       "transfer selection must preserve the camera state"
     );
-    // O preset traz a própria janela (applyPreset): o W/L 3D vai para o domínio
-    // nativo dele, de onde o arrasto W/L varre o preset pelo volume.
+    // The preset supplies its own window (applyPreset): 3D W/L uses its native
+    // domain, where a W/L drag sweeps the preset through the volume.
     const presetWindow = await page.evaluate(() => {
       const view = window.viewer.viewer.volumeView;
       return window.DicomSlideVolume.transferFunctionWindow("bones-bw", view.transferDomain);
@@ -227,7 +227,7 @@ const baseUrl = process.env.DICOM_SLIDE_BASE_URL || "http://127.0.0.1:8765";
     assert.equal(transferState.center, presetWindow.center);
     assert.equal(transferState.width, presetWindow.width);
 
-    // Os sliders começam escondidos; o toggle "Sliders" os revela.
+    // Sliders start hidden; the "Sliders" toggle reveals them.
     assert.equal(await page.locator('[data-volume-control="volume-shift"]').isVisible(), false);
     await page.locator("[data-volume-action='toggle-sliders']").click();
     await page.locator('[data-volume-control="volume-shift"]').fill("400");
@@ -243,7 +243,7 @@ const baseUrl = process.env.DICOM_SLIDE_BASE_URL || "http://127.0.0.1:8765";
     assert.equal(
       await page.evaluate(() => window.viewer.viewer.volumeView.getState().shading),
       false,
-      "Airways não recomenda sombreamento"
+      "Airways does not recommend shading"
     );
     if (process.env.DICOM_SLIDE_SCREENSHOT) {
       await page.screenshot({ path: process.env.DICOM_SLIDE_SCREENSHOT, fullPage: true });

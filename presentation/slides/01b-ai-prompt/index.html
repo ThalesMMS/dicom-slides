@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Prompt your AI agent — DICOM Slide</title>
+  <link rel="stylesheet" href="../../shared/slide.css">
+</head>
+<body>
+  <main class="slide active guide-slide" aria-label="Copy-ready instructions for an AI agent">
+    <div class="slide-inner">
+      <span class="eyebrow">Create your own deck · 2 of 3</span>
+      <h2>Give your agent a clear starting point</h2>
+      <pre class="agent-prompt"><code>Use https://github.com/ThalesMMS/dicom-slides as the starting point for an English presentation with my own imaging cases.
+
+My anonymized DICOM files are in &lt;PATH TO MY DICOM FOLDER OR ZIP&gt;.
+
+Work in a local copy of the repository. Use its existing conversion and validation tools, add my processed studies to the presentation, preserve the interactive viewer, update titles and references, and test the result.
+
+Do not copy or commit my raw DICOM files or ZIP. Stop and tell me if you find identifying information or cannot verify that the inputs are anonymized.
+
+When finished, tell me which files changed and how to open the presentation.</code></pre>
+      <p class="guide-footnote">Replace the text in angle brackets with the real path shown by your computer, such as <code>C:\Cases\Teaching\case-01.zip</code> or <code>/Users/me/Cases/case-01</code>.</p>
+    </div>
+  </main>
+  <script src="../../shared/slide-bridge.js"></script>
+</body>
+</html>

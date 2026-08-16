@@ -18,7 +18,7 @@ function loadCatalog() {
   const filename = existing("presentation/slides.js");
   const sandbox = { window: {} };
   vm.runInNewContext(fs.readFileSync(filename, "utf8"), sandbox, { filename });
-  return sandbox.window.DicomSlideSlides;
+  return Array.from(sandbox.window.DicomSlideSlides, (slide) => ({ ...slide }));
 }
 
 existing("runtime/dicom-slide.js");
@@ -31,7 +31,19 @@ assert.match(fs.readFileSync(existing("exams/inbox/.gitignore"), "utf8"), /^\*$/
 
 const catalog = loadCatalog();
 assert.ok(Array.isArray(catalog), "slide catalog must expose an array");
-assert.ok(catalog.length >= 3, "presentation must keep its three slides");
+assert.deepEqual(
+  catalog.map((slide) => slide.id),
+  [
+    "01-introduction",
+    "01a-ai-setup",
+    "01b-ai-prompt",
+    "01c-ai-review",
+    "02-visible-human",
+    "03-mri-dir",
+    "04-references",
+  ],
+  "presentation must publish the approved seven-slide narrative"
+);
 
 const slideFiles = catalog.map((slide) => {
   assert.match(slide.id, /^[a-z0-9-]+$/, "slide id must be URL- and folder-friendly");
@@ -40,6 +52,22 @@ const slideFiles = catalog.map((slide) => {
   assert.match(slide.src, /^slides\/[a-z0-9-]+\/index\.html$/);
   return existing(`presentation/${slide.src}`);
 });
+
+const slideHtmlById = new Map(catalog.map((slide, index) => [
+  slide.id,
+  fs.readFileSync(slideFiles[index], "utf8"),
+]));
+for (const [id, html] of slideHtmlById) {
+  assert.match(html, /<html lang="en">/, `${id} must declare English`);
+}
+assert.match(slideHtmlById.get("01a-ai-setup"), /Start with three things/);
+assert.match(slideHtmlById.get("01b-ai-prompt"), /https:\/\/github\.com\/ThalesMMS\/dicom-slides/);
+assert.match(slideHtmlById.get("01b-ai-prompt"), /PATH TO MY DICOM FOLDER OR ZIP/);
+assert.match(slideHtmlById.get("01c-ai-review"), /Check the result before you share it/);
+assert.match(slideHtmlById.get("01c-ai-review"), /not an anonymization certificate/i);
+assert.match(slideHtmlById.get("04-references"), /Courtesy of the U\.S\. National Library of Medicine/);
+assert.match(slideHtmlById.get("04-references"), /10\.7937\/K9\/TCIA\.2018\.3f08iejt/);
+assert.match(slideHtmlById.get("04-references"), /Santos, T\. M\. M\. \(2026\)/);
 
 assert.equal(new Set(slideFiles).size, slideFiles.length, "each catalog item must point to its own HTML file");
 assert.equal(

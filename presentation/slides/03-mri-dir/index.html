@@ -1,33 +1,33 @@
 <!doctype html>
-<html lang="pt-BR">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="color-scheme" content="dark">
-  <title>MRI-DIR — RM sintética multissérie</title>
+  <title>MRI-DIR — multi-series synthetic T1 MR</title>
   <link rel="stylesheet" href="../../shared/slide.css">
   <style>dicom-study-viewer{display:block;width:100%;height:100%}</style>
 </head>
 <body>
-  <main class="slide active study-slide" data-study-id="mri-dir-t1-mr">
+  <main class="slide active study-slide" data-study-id="mri-dir-t1-mr" aria-label="MRI-DIR multi-series synthetic T1 MR">
     <div class="slide-inner">
       <div class="study-heading">
-        <div><span class="eyebrow">Volume 2 · MR</span><h2>MRI-DIR — RM sintética T1 multissérie</h2></div>
-        <div class="study-status" aria-live="polite">Carregando estudo…</div>
+        <div><span class="eyebrow">Volume 2 · MR</span><h2>MRI-DIR — multi-series synthetic T1 MR</h2></div>
+        <div class="study-status" aria-live="polite">Loading study…</div>
       </div>
       <div class="study-layout">
         <aside class="study-card">
           <div class="metric-grid">
-            <div><strong>4</strong><span>séries</span></div>
-            <div><strong>56</strong><span>imagens</span></div>
-            <div><strong>256²</strong><span>matriz</span></div>
-            <div><strong>1×1×4 mm</strong><span>geometria</span></div>
+            <div><strong>4</strong><span>series</span></div>
+            <div><strong>56</strong><span>images</span></div>
+            <div><strong>256²</strong><span>matrix</span></div>
+            <div><strong>1×1×4 mm</strong><span>geometry</span></div>
           </div>
-          <h3>Conjunto de pesquisa</h3>
-          <p>As séries T1Post1–T1Post4 são imagens sintéticas/modeladas para avaliação de registro deformável, não um exame diagnóstico multissequência.</p>
+          <h3>Research dataset</h3>
+          <p>T1Post1–T1Post4 are synthetic/modelled images for deformable-registration research, not a diagnostic multi-sequence acquisition.</p>
           <dl class="study-meta">
-            <div><dt>Origem</dt><dd>MRI-DIR · The Cancer Imaging Archive</dd></div>
-            <div><dt>Licença</dt><dd>CC BY 4.0</dd></div>
+            <div><dt>Source</dt><dd>MRI-DIR · The Cancer Imaging Archive</dd></div>
+            <div><dt>License</dt><dd>CC BY 4.0</dd></div>
             <div><dt>DOI</dt><dd>10.7937/K9/TCIA.2018.3f08iejt</dd></div>
           </dl>
         </aside>
@@ -44,11 +44,11 @@
     const status = document.querySelector(".study-status");
     const update = () => {
       const state = viewer.getState();
-      const image = state.totalSlices ? ` · imagem ${Number(state.slice || 0) + 1}/${state.totalSlices}` : "";
+      const image = state.totalSlices ? ` · image ${Number(state.slice || 0) + 1}/${state.totalSlices}` : "";
       const mode = state.mode === "mpr" ? " · MPR" : state.mode === "volume" ? " · 3D" : "";
       status.textContent = state.totalSeries
-        ? `Série ${state.seriesNumber || state.seriesIndex + 1} · ${state.seriesIndex + 1}/${state.totalSeries}${image}${mode}`
-        : "Carregando estudo…";
+        ? `Series ${state.seriesNumber || state.seriesIndex + 1} · ${state.seriesIndex + 1}/${state.totalSeries}${image}${mode}`
+        : "Loading study…";
     };
     ["dicom-ready", "dicom-series-change", "dicom-state-change", "dicom-mode-change"]
       .forEach((name) => viewer.addEventListener(name, update));
