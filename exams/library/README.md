@@ -1,15 +1,14 @@
-# Estudos processados
+# Processed studies
 
-Esta biblioteca contém somente dois estudos executáveis e com proveniência
-documentada:
+This library contains only two executable studies with documented provenance:
 
-- `visible-human-abdomen-ct`: TC abdominal do Visible Human Male, duas séries,
-  401 imagens derivadas dos PNGs oficiais da NLM.
-- `mri-dir-t1-mr`: caso sintético `MRI-DIR-T1_1` do TCIA, quatro séries, 56
-  imagens DICOM.
+- `visible-human-abdomen-ct`: Visible Human Male abdominal CT, two series, 401
+  images derived from official NLM PNGs.
+- `mri-dir-t1-mr`: synthetic TCIA case `MRI-DIR-T1_1`, four series, 56 DICOM
+  images.
 
-Todos os pacotes incluem `study.json`/`study.js`, manifestos por série e chunks
-de pixel completos. Não há estudos somente com metadados.
+Every package includes `study.json`/`study.js`, per-series manifests, and
+complete pixel chunks. There are no metadata-only studies.
 
-As condições de redistribuição e as atribuições obrigatórias estão em
+Redistribution terms and mandatory attributions are in
 [`../../DATA_LICENSES.md`](../../DATA_LICENSES.md).

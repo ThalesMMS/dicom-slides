@@ -1,4 +1,4 @@
-# Fluxo de exames
+# Study workflow
 
 1. Put the raw DICOM directory or ZIP in `exams/inbox/`.
 2. Convert it into a browser package:
@@ -15,9 +15,9 @@
 
 4. Reference `exams/library/my-exam/study.js` from a `<dicom-study-viewer>`.
 
-O `inbox/` é ignorado intencionalmente. `library/` contém pacotes JavaScript
-processados e autorregistráveis que funcionam por HTTP e `file://`.
+`inbox/` is intentionally ignored. `library/` contains processed,
+self-registering JavaScript packages that work over HTTP and `file://`.
 
-Os dados incluídos têm licenças próprias, diferentes da licença MIT do código.
-Leia [`../DATA_LICENSES.md`](../DATA_LICENSES.md) antes de adicionar,
-redistribuir ou apresentar imagens.
+Included data have their own licenses, separate from the code's MIT license.
+Read [`../DATA_LICENSES.md`](../DATA_LICENSES.md) before adding,
+redistributing, or presenting images.

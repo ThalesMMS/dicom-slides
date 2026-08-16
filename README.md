@@ -1,52 +1,51 @@
 # DICOM Slide
 
-Visualizador médico estático com pilha 2D, MPR triplanar e renderização 3D por
-raycasting WebGL2. O mesmo payload Int16 alimenta os três modos, sem cópia
-NIfTI/Zarr e sem backend.
+Static medical viewer with a 2D stack, triplanar MPR, and WebGL2 ray-cast 3D
+rendering. The same Int16 payload drives all three modes, with no NIfTI/Zarr
+copy and no backend.
 
-> **Uso demonstrativo, educacional e de pesquisa. Não destinado a diagnóstico
-> ou tomada de decisão clínica.**
+> **Demonstration, education, and research use only. Not intended for diagnosis or clinical decision-making.**
 
-## Demonstração local
+## Local demo
 
-Abra `index.html` diretamente. O projeto e os exames incluídos são compatíveis
-com `file://`.
+Open `index.html` directly. The project and included studies work with
+`file://`.
 
-Se o navegador bloquear scripts locais, execute:
+If your browser blocks local scripts, run:
 
 ```console
 python serve.py
 ```
 
-No Windows também é possível usar `serve.bat`; no macOS/Linux,
-`./serve.command`. O runtime não exige `npm install`, CDN, servidor de aplicação
-ou dependência JavaScript externa.
+On Windows, you can also use `serve.bat`; on macOS/Linux, use
+`./serve.command`. The runtime needs no `npm install`, CDN, application server,
+or external JavaScript dependency.
 
-## Estudos incluídos
+## Included studies
 
-| Estudo | Séries | Imagens | Dimensões | Licença dos dados |
+| Study | Series | Images | Dimensions | Data license |
 |---|---:|---:|---|---|
-| Visible Human Male — TC abdominal | 2 (normal e após congelamento) | 401 | 256 × 256 × 100/301 | Domínio público + termos NLM |
-| MRI-DIR — RM sintética T1 | 4 (`T1Post1`–`T1Post4`) | 56 | 256 × 256 × 14 | CC BY 4.0 |
+| Visible Human Male — abdominal CT | 2 (normal and after freezing) | 401 | 256 × 256 × 100/301 | Public domain + NLM terms |
+| MRI-DIR — synthetic T1 MR | 4 (`T1Post1`–`T1Post4`) | 56 | 256 × 256 × 14 | CC BY 4.0 |
 
-O CT é um derivado reprodutível das imagens PNG oficiais da NLM: índices
-abdominais 1500–1800, redução 2× no plano e conversão `HU = valor − 1024`. A
-série normal tem a lacuna de aquisição 1557. A RM é o caso `MRI-DIR-T1_1` do
-TCIA; suas quatro séries são imagens sintéticas/modeladas para pesquisa de
-registro deformável, e não um exame clínico multissequência.
+The CT is a reproducible derivative of the official NLM PNG images: abdominal
+indices 1500–1800, 2× in-plane reduction, and conversion using
+`HU = value − 1024`. The normal series has an acquisition gap at 1557. The MR
+study is TCIA case `MRI-DIR-T1_1`; its four series are synthetic/modelled images
+for deformable-registration research, not a multi-sequence clinical study.
 
-Leia [`DATA_LICENSES.md`](DATA_LICENSES.md) antes de redistribuir as imagens e
-[`CITING.md`](CITING.md) antes de usá-las em uma apresentação. Em particular:
+Read [`DATA_LICENSES.md`](DATA_LICENSES.md) before redistributing images and
+[`CITING.md`](CITING.md) before using them in a presentation. In particular:
 
-- Visible Human: **“Courtesy of the U.S. National Library of Medicine”**. A
-  atribuição não implica endosso da NLM.
+- Visible Human: **“Courtesy of the U.S. National Library of Medicine”**. This
+  attribution does not imply NLM endorsement.
 - MRI-DIR: cite Ger et al. (2018), TCIA,
   [doi:10.7937/K9/TCIA.2018.3f08iejt](https://doi.org/10.7937/K9/TCIA.2018.3f08iejt),
   CC BY 4.0.
 
-## Incorporar em outra apresentação HTML
+## Embed in another HTML presentation
 
-Carregue o script clássico e declare o Web Component:
+Load the classic script and declare the Web Component:
 
 ```html
 <div style="width:100%;height:70vh">
@@ -59,34 +58,34 @@ Carregue o script clássico e declare o Web Component:
 </div>
 ```
 
-O componente inclui seletor de séries, ferramentas 2D, presets, MPR, 3D,
-expansão e reset. Os atributos iniciais opcionais são `series`, `mode`,
-`preset`, `slice` e `tool`. Integrações JavaScript podem aguardar
-`element.ready` e chamar `setSeries`, `setMode`, `setSlice`, `setPreset`,
-`setWindow`, `setTool`, `setExpanded`, `reset` ou `getState`.
+The component includes a series selector, 2D tools, presets, MPR, 3D,
+expansion, and reset. Optional initial attributes are `series`, `mode`,
+`preset`, `slice`, and `tool`. JavaScript integrations can await
+`element.ready` and call `setSeries`, `setMode`, `setSlice`, `setPreset`,
+`setWindow`, `setTool`, `setExpanded`, `reset`, or `getState`.
 
-O contrato completo está em [`runtime/README.md`](runtime/README.md). O adapter
-opcional por query string/`postMessage` está em `runtime/iframe/index.html`.
+The complete contract is in [`runtime/README.md`](runtime/README.md). The
+optional query-string/`postMessage` adapter is in `runtime/iframe/index.html`.
 
-## Controles principais
+## Viewer controls
 
-- `2D`: pilha axial convencional.
-- `MPR`: planos axial, coronal e sagital sincronizados.
-- `3D`: raycasting WebGL2 com funções de transferência.
-- `D`: alterna 2D → MPR → 3D; `Esc`: retorna a 2D.
-- `W`, `M`, `Z`, `S`: Window/Level, Pan, Zoom e Scroll.
-- `R`: rotação em 3D.
-- `1`–`5`: presets Default, Abdomen, Lung, Bone e Brain.
-- Roda do mouse: percorre cortes em 2D/MPR e aplica zoom em 3D.
-- Botão direito/`Alt` + arraste: zoom; botão do meio/`Shift` + arraste: pan.
+- `2D`: conventional axial stack.
+- `MPR`: synchronized axial, coronal, and sagittal planes.
+- `3D`: WebGL2 ray casting with transfer functions.
+- `D`: switches 2D → MPR → 3D; `Esc`: returns to 2D.
+- `W`, `M`, `Z`, `S`: Window/Level, Pan, Zoom, and Scroll.
+- `R`: rotation in 3D.
+- `1`–`5`: Default, Abdomen, Lung, Bone, and Brain presets.
+- Mouse wheel: moves through slices in 2D/MPR and zooms in 3D.
+- Right mouse button/`Alt` + drag: zoom; middle mouse button/`Shift` + drag:
+  pan.
 
-Em 2D, só o chunk necessário permanece no cache, com prefetch dos vizinhos. Na
-primeira abertura de MPR ou 3D, os chunks da série ativa são montados de forma
-preguiçosa em um volume contínuo. O limite de segurança da CPU é 512 MiB; o
-payload da GPU é reduzido quando necessário para respeitar o limite de textura
-3D.
+In 2D, only the needed chunk remains cached, with adjacent chunks prefetched.
+On the first opening of MPR or 3D, chunks for the active series are lazily
+assembled into a continuous volume. The CPU safety limit is 512 MiB; the GPU
+payload is reduced when necessary to respect the 3D texture limit.
 
-## Formato de dados
+## Data format
 
 ```text
 dicom-slide-study/1
@@ -96,48 +95,48 @@ dicom-slide-study/1
     manifest.js
     manifest.json
     chunks/
-      chunk-000.js  # Int16 little-endian → gzip → base64 → script local
+      chunk-000.js  # Int16 little-endian → gzip → base64 → local script
 ```
 
-Os scripts registram os dados sem `fetch`, por isso funcionam em `file://`.
-Geometria LPS, espaçamento, coordenadas dos cortes, janela, presets e
-proveniência permanecem nos manifestos.
+Scripts register data without `fetch`, so they work with `file://`. LPS
+geometry, spacing, slice coordinates, windowing, presets, and provenance stay
+in the manifests.
 
-## Processar um novo exame DICOM
+## Process a new DICOM study
 
-Coloque o diretório ou ZIP bruto em `exams/inbox/` (ignorado pelo Git) e gere o
-pacote estático:
+Put the raw directory or ZIP in `exams/inbox/` (ignored by Git) and generate a
+static package:
 
 ```console
-python tools/convert_study.py exams/inbox/exam.zip exams/library/novo-exame \
-  --study-id novo-exame \
-  --title "Novo exame" \
+python tools/convert_study.py exams/inbox/my-exam.zip exams/library/my-exam \
+  --study-id my-exam \
+  --title "My study" \
   --chunk-size 12
 ```
 
-O conversor aceita imagens single-frame monocromáticas/RGB, Implicit/Explicit
-VR Little Endian e Explicit VR Big Endian. JPEG 2000 single-frame pode ser
-decodificado pelo Pillow; outras sintaxes comprimidas exigem `gdcmconv` somente
-no ambiente de conversão. O navegador continua sem dependências.
+The converter accepts monochrome/RGB single-frame images, Implicit/Explicit VR
+Little Endian, and Explicit VR Big Endian. Pillow can decode JPEG 2000
+single-frame images; other compressed syntaxes require `gdcmconv` only in the
+conversion environment. The browser remains dependency-free.
 
-Dependências opcionais de conversão:
+Optional conversion dependencies:
 
 ```console
 python -m pip install -r requirements-conversion.txt
 ```
 
-## Reproduzir o CT do Visible Human
+## Rebuild the Visible Human study
 
-O importador baixa as duas séries oficiais, valida os PNGs, registra hashes e
-só então publica o pacote de forma atômica:
+The importer downloads both official series, validates the PNGs, records
+hashes, and only then publishes the package atomically:
 
 ```console
 python tools/import_visible_human.py exams/library/visible-human-abdomen-ct \
   --start 1500 --end 1800 --downsample 2 --chunk-size 12 \
-  --cache-dir /caminho/para/cache
+  --cache-dir /path/to/cache
 ```
 
-## Validar
+## Validation
 
 ```console
 python tools/validate_project.py exams/library/visible-human-abdomen-ct
@@ -146,33 +145,37 @@ python -m unittest discover -s tests/python -v
 node tests/javascript/test_volume_integration.js
 ```
 
-O validador confere manifestos, séries, contagens, scripts, base64, gzip e o
-tamanho exato dos buffers descomprimidos.
+The validator checks manifests, series, counts, scripts, base64, gzip, and the
+exact size of decompressed buffers.
 
-## Estrutura
+## Repository layout
 
 ```text
 index.html
-runtime/                 viewer reutilizável
-presentation/            deck modular
+runtime/                 reusable viewer
+presentation/            modular deck
 exams/
-  inbox/                 fontes brutas ignoradas pelo Git
-  library/               dois pacotes de demonstração
-tools/                    conversores, importador e validador
-tests/                    testes Python, JavaScript e navegador
-LICENSE                   código/documentação: MIT
-DATA_LICENSES.md          licenças e proveniência das imagens
-CITATION.cff              metadados de citação para o GitHub
-CITING.md                 texto pronto para apresentações
+  inbox/                 raw sources ignored by Git
+  library/               two demonstration packages
+tools/                    converters, importer, and validator
+tests/                    Python, JavaScript, and browser tests
+LICENSE                   code/documentation: MIT
+DATA_LICENSES.md          image licenses and provenance
+CITATION.cff              GitHub citation metadata
+CITING.md                 ready-to-use presentation wording
 ```
 
-Cada slide é um documento independente em
-`presentation/slides/<número-nome>/index.html`. A ordem fica em
-`presentation/slides.js`; veja [`presentation/README.md`](presentation/README.md).
+## Slide authoring
 
-## Licenças
+Each slide is an independent document in
+`presentation/slides/<number-name>/index.html`. The order is in
+`presentation/slides.js`; see [`presentation/README.md`](presentation/README.md).
 
-O código e a documentação original são distribuídos sob a licença MIT. Os
-dados de imagem mantêm suas próprias condições: Visible Human/NLM e
-MRI-DIR/TCIA CC BY 4.0. Consulte [`DATA_LICENSES.md`](DATA_LICENSES.md); os
-textos aplicáveis estão em [`LICENSES/`](LICENSES/).
+To build a presentation from your own cases, give a file-capable local AI agent this repository URL and the path to an anonymized DICOM directory or ZIP. Keep raw inputs in `exams/inbox/` or another ignored local directory. The converter does not certify anonymization; inspect all metadata before publishing.
+
+## Licenses
+
+The code and original documentation are distributed under the MIT license.
+Image data retain their own terms: Visible Human/NLM and MRI-DIR/TCIA CC BY 4.0.
+See [`DATA_LICENSES.md`](DATA_LICENSES.md); applicable texts are in
+[`LICENSES/`](LICENSES/).

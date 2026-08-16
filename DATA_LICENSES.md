@@ -1,48 +1,47 @@
-# Licenças e proveniência dos dados
+# Data licenses and provenance
 
-A licença MIT do arquivo [`LICENSE`](LICENSE) cobre o código e a documentação
-originais deste projeto. Ela **não substitui** as condições dos conjuntos de
-imagens distribuídos em `exams/library/`.
+The MIT license in [`LICENSE`](LICENSE) covers this project's original code and
+documentation. It **does not replace** the terms for image datasets distributed
+in `exams/library/`.
 
-## Visible Human Male — TC abdominal
+## Visible Human Male — abdominal CT
 
-- Pacote: `exams/library/visible-human-abdomen-ct/`
-- Fonte: [Visible Human Project, U.S. National Library of Medicine](https://www.nlm.nih.gov/research/visible/visible_human.html)
-- Imagens de origem: séries radiológicas `normalCT` e `frozenCT`, índices
-  1500–1800; a aquisição normal não contém o índice 1557.
-- Situação jurídica informada pela NLM: biblioteca em domínio público; desde
-  2019 não é exigida licença de acesso.
-- Condições adicionais de redistribuição:
+- Package: `exams/library/visible-human-abdomen-ct/`
+- Source: [Visible Human Project, U.S. National Library of Medicine](https://www.nlm.nih.gov/research/visible/visible_human.html)
+- Source images: `normalCT` and `frozenCT` radiology series, indices 1500–1800;
+  the normal acquisition does not include index 1557.
+- Legal status stated by NLM: the library is in the public domain; no access
+  license has been required since 2019.
+- Additional redistribution terms:
   [NLM Terms and Conditions](https://www.nlm.nih.gov/databases/download/terms_and_conditions.html).
-- Atribuição exigida: **“Courtesy of the U.S. National Library of Medicine”**.
+- Required attribution: **“Courtesy of the U.S. National Library of Medicine.”**
 
-Este projeto reduz as imagens de 512 × 512 para 256 × 256 por amostragem do
-vizinho mais próximo, converte o valor armazenado em HU pela relação
-`HU = valor − 1024` e empacota os pixels como Int16/gzip/base64. O manifesto de
-cada série registra o intervalo, o hash agregado das imagens-fonte e a
-transformação aplicada.
+This project reduces the images from 512 × 512 to 256 × 256 with nearest-neighbor
+sampling, converts the stored value to HU using `HU = value − 1024`, and packages
+pixels as Int16/gzip/base64. Each series manifest records the interval, aggregate
+source-image hash, and applied transformation.
 
-A atribuição não significa que a NLM aprovou, certificou, patrocinou ou mantém
-este software. Conforme os termos da NLM, redistribuidores também devem alertar
-que os dados podem não estar atuais ou corretos. Não há garantias.
+This attribution does not mean that NLM approved, certified, sponsored, or maintains this software.
+Under the NLM terms, redistributors must also warn that the data may not be
+current or accurate. No warranties are provided.
 
-## MRI-DIR — RM sintética T1 multissérie
+## MRI-DIR — multi-series synthetic T1 MR
 
-- Pacote: `exams/library/mri-dir-t1-mr/`
-- Coleção: [Synthetic and Phantom MR Images for Determining Deformable Image Registration Accuracy (MRI-DIR)](https://www.cancerimagingarchive.net/collection/mri-dir/)
-- Caso: `MRI-DIR-T1_1`, quatro séries (`T1Post1`–`T1Post4`), 56 imagens.
-- Licença dos dados: [Creative Commons Attribution 4.0 International](https://creativecommons.org/licenses/by/4.0/).
-- Texto integral: [`LICENSES/CC-BY-4.0.txt`](LICENSES/CC-BY-4.0.txt).
-- Aviso fornecido com o download do TCIA:
+- Package: `exams/library/mri-dir-t1-mr/`
+- Collection: [Synthetic and Phantom MR Images for Determining Deformable Image Registration Accuracy (MRI-DIR)](https://www.cancerimagingarchive.net/collection/mri-dir/)
+- Case: `MRI-DIR-T1_1`, four series (`T1Post1`–`T1Post4`), 56 images.
+- Data license: [Creative Commons Attribution 4.0 International](https://creativecommons.org/licenses/by/4.0/).
+- Full text: [`LICENSES/CC-BY-4.0.txt`](LICENSES/CC-BY-4.0.txt).
+- Notice provided with the TCIA download:
   [`LICENSES/MRI-DIR-TCIA.txt`](LICENSES/MRI-DIR-TCIA.txt).
 
-As imagens são sintéticas/modeladas a partir de imagens de cabeça e pescoço e
-servem à avaliação de registro deformável; não representam uma aquisição
-diagnóstica multissequência. O projeto apenas remove os contêineres DICOM do
-runtime e reempacota os valores armazenados em chunks Int16, preservando
-geometria, ordem e valores de pixel.
+The images are synthetic/modelled from head-and-neck images and support
+deformable-registration evaluation; they do not represent a multi-sequence
+diagnostic acquisition. The project only removes DICOM containers from the
+runtime and repackages stored values in Int16 chunks, preserving geometry, order,
+and pixel values.
 
-Citação dos dados:
+Data citation:
 
 > Ger, R. B., Yang, J., Ding, Y., Jacobsen, M. C., Cardenas, C. E., Fuller,
 > C. D., Howell, R. M., Li, H., Stafford, R. J., Zhou, S., & Court, L. (2018).
@@ -50,14 +49,14 @@ Citação dos dados:
 > Registration Accuracy (MRI-DIR)* (Version 1). The Cancer Imaging Archive.
 > https://doi.org/10.7937/K9/TCIA.2018.3f08iejt
 
-O TCIA exige que o conjunto específico e o repositório NIH sejam reconhecidos
-em apresentações orais ou escritas, divulgações e publicações. É proibido tentar
-reidentificar ou contatar participantes. Consulte também a
-[política de uso do TCIA](https://wiki.cancerimagingarchive.net/display/Public/Data%2BUsage%2BPolicies%2Band%2BRestrictions).
+TCIA requires acknowledgement of the specific dataset and NIH repository in
+oral or written presentations, disclosures, and publications. Attempts to
+re-identify or contact participants are prohibited. Also see the
+[TCIA data-usage policy](https://wiki.cancerimagingarchive.net/display/Public/Data%2BUsage%2BPolicies%2Band%2BRestrictions).
 
-## Uso pretendido
+## Intended use
 
-Os dois pacotes foram incluídos para demonstração técnica, educação e pesquisa.
-Não se destinam a diagnóstico, planejamento terapêutico ou tomada de decisão
-clínica. Consulte [`CITING.md`](CITING.md) antes de reutilizar imagens em uma
-apresentação.
+Both packages are included for technical demonstration, education, and research.
+They are not intended for diagnosis, treatment planning, or clinical
+decision-making. Read [`CITING.md`](CITING.md) before reusing images in a
+presentation.

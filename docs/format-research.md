@@ -1,135 +1,232 @@
-# Formatos para MPR/reslice e persistência de resultados 3D
+# Formats for MPR/reslicing and persistence of 3D results
 
-Pesquisa realizada em 2026-08-14, usando apenas especificações e documentação oficial.
+Research performed on 2026-08-14, using only official specifications and
+documentation.
 
-## Resposta curta
+## Short answer
 
-- **Para fazer reslice/MPR**, é necessário preservar o **volume escalar** (por exemplo, HU em `Int16`) e a transformação espacial que leva índices de voxel a coordenadas físicas. DICOM, NIfTI, Zarr/OME-Zarr e o formato customizado deste projeto podem conter dados suficientes.
-- **Para MPR eficiente no navegador**, o melhor modelo de distribuição é uma matriz 3D dividida em **bricks**, isto é, chunks que têm extensão limitada nos três eixos. Zarr fornece exatamente esse modelo; OME-Zarr acrescenta eixos, unidades, níveis de resolução e labelmaps.
-- **Para guardar um volume que continuará sendo renderizado em 3D**, guarde o volume escalar, não glTF. A câmera, função de transferência, recorte e iluminação são um estado de apresentação separado.
-- **Para guardar uma superfície 3D já extraída** (pele, osso ou órgão segmentado), `glTF`/`GLB` é adequado para a web. Ele não preserva os voxels e, portanto, não permite novo windowing, mudança de limiar ou MPR.
-- **Para guardar somente a aparência final**, use uma imagem ou vídeo. Isso é uma renderização 2D, não um exame ou modelo 3D reutilizável.
+- **To reslice/MPR**, preserve the **scalar volume** (for example, HU in
+  `Int16`) and the spatial transform from voxel indices to physical
+  coordinates. DICOM, NIfTI, Zarr/OME-Zarr, and this project's custom format
+  can contain sufficient data.
+- **For efficient browser MPR**, the best delivery model is a 3D array divided
+  into **bricks**, meaning chunks with bounded extent along all three axes.
+  Zarr provides exactly that model; OME-Zarr adds axes, units, resolution
+  levels, and labelmaps.
+- **To store a volume that will continue to be rendered in 3D**, store the
+  scalar volume, not glTF. Camera, transfer function, cropping, and lighting
+  are separate presentation state.
+- **To store an already extracted 3D surface** (skin, bone, or a segmented
+  organ), `glTF`/`GLB` is suitable for the web. It does not preserve voxels and
+  therefore does not allow new windowing, threshold changes, or MPR.
+- **To store only the final appearance**, use an image or video. That is a 2D
+  rendering, not a reusable study or 3D model.
 
-## Três objetos diferentes que costumam ser chamados de “3D”
+## Three different objects commonly called “3D”
 
-| Objeto | O que contém | O que ainda pode ser alterado | Formatos apropriados |
+| Object | What it contains | What can still change | Suitable formats |
 |---|---|---|---|
-| Volume escalar | Um valor por voxel e geometria física | plano de corte, interpolação, window/level, limiar, função de transferência, câmera | DICOM, NIfTI, Zarr/OME-Zarr, chunks deste projeto |
-| Malha/cena | vértices, triângulos, materiais, câmera e transformações | câmera, iluminação e materiais; não os valores internos do exame | glTF/GLB; DICOM Surface Segmentation ou OBJ encapsulado quando o vínculo clínico for importante |
-| Imagem/vídeo renderizado | pixels RGB(A) finais | praticamente nada além de exibição | PNG, JPEG/WebP ou vídeo |
+| Scalar volume | One value per voxel and physical geometry | slice plane, interpolation, window/level, threshold, transfer function, camera | DICOM, NIfTI, Zarr/OME-Zarr, this project's chunks |
+| Mesh/scene | vertices, triangles, materials, camera, and transforms | camera, lighting, and materials; not the study's internal values | glTF/GLB; DICOM Surface Segmentation or encapsulated OBJ when the clinical link matters |
+| Rendered image/video | final RGB(A) pixels | almost nothing beyond display | PNG, JPEG/WebP, or video |
 
-Uma malha não substitui o volume. Ela representa apenas superfícies escolhidas por uma segmentação ou limiar. Da mesma forma, uma captura do volume renderizado não contém profundidade nem densidades que permitam reconstruir o exame.
+A mesh does not replace the volume. It represents only surfaces chosen by a
+segmentation or threshold. Similarly, a capture of the rendered volume contains
+neither depth nor densities from which to reconstruct the study.
 
-## O que é necessário para um reslice correto
+## Requirements for correct reslicing
 
-O formato precisa fornecer, no mínimo:
+At minimum, the format must provide:
 
-1. matriz 3D completa de valores escalares, sem windowing destrutivo;
-2. tipo e significado dos valores (`Int16` em HU, neste projeto);
-3. dimensões e espaçamento físico;
-4. origem e orientação, idealmente como uma transformação afim 4×4 de voxel para um sistema físico conhecido;
-5. posição individual dos cortes quando a amostragem não é uniforme;
-6. uma política de interpolação no viewer.
+1. a complete 3D scalar-value array, without destructive windowing;
+2. the values' type and meaning (`Int16` in HU in this project);
+3. physical dimensions and spacing;
+4. origin and orientation, ideally as a 4×4 affine transform from voxel to a
+   known physical coordinate system;
+5. an individual slice position when sampling is irregular; and
+6. an interpolation policy in the viewer.
 
-PNG pré-windowed não é suficiente: perdeu precisão e todos os valores fora da janela escolhida. Uma pilha de cortes ainda pode ser suficiente, mas só se sua geometria espacial também for conhecida.
+Pre-windowed PNG is insufficient: it has lost precision and all values outside
+the selected window. A slice stack can still be sufficient, but only if its
+spatial geometry is also known.
 
-## Comparação dos formatos
+## Format comparison
 
 ### DICOM
 
-DICOM é a melhor fonte canônica clínica. Os objetos de imagem representam pixels, contexto clínico e geometria; os Functional Groups de imagens multi-frame incluem **Pixel Measures**, **Plane Position (Patient)** e **Plane Orientation (Patient)**. O padrão também define um **Planar MPR Volumetric Presentation State**, com geometria para MPR fina ou em slab, recorte, composição e apresentação. Fontes: [DICOM PS3.3 — Common Functional Group Macros](https://dicom.nema.org/medical/dicom/current/output/chtml/part03/sect_c.7.6.16.2.html) e [DICOM PS3.3 — Volumetric Presentation State IODs](https://dicom.nema.org/medical/dicom/current/output/chtml/part03/sect_a.80.html).
+DICOM is the best canonical clinical source. Image objects represent pixels,
+clinical context, and geometry; multi-frame image Functional Groups include
+**Pixel Measures**, **Plane Position (Patient)**, and **Plane Orientation
+(Patient)**. The standard also defines a **Planar MPR Volumetric Presentation
+State**, with geometry for thin or slab MPR, cropping, compositing, and
+presentation. Sources: [DICOM PS3.3 — Common Functional Group Macros](https://dicom.nema.org/medical/dicom/current/output/chtml/part03/sect_c.7.6.16.2.html)
+and [DICOM PS3.3 — Volumetric Presentation State IODs](https://dicom.nema.org/medical/dicom/current/output/chtml/part03/sect_a.80.html).
 
-Logo, DICOM contém informação suficiente para MPR, desde que a série seja geometricamente coerente ou seja normalizada antes. Porém, “ser suficiente” não significa “ser o payload mais simples para um site estático”: um cliente precisa interpretar datasets, geometria, modality LUT/rescale e transfer syntaxes. Com DICOMweb, metadados e pixels/frames podem ser obtidos separadamente, mas um MPR client-side transversal ou oblíquo ainda acaba precisando dos voxels atravessados pelo plano; uma alternativa é renderização no servidor. Fonte: [DICOM PS3.18 — Retrieve Transaction](https://dicom.nema.org/medical/dicom/current/output/chtml/part18/sect_10.4.html).
+Therefore, DICOM contains enough information for MPR if the series is
+geometrically coherent or normalized first. However, “sufficient” does not mean
+“the simplest payload for a static site”: a client must interpret datasets,
+geometry, modality LUT/rescale, and transfer syntaxes. With DICOMweb, metadata
+and pixels/frames can be retrieved separately, but a transverse or oblique
+client-side MPR still needs the voxels crossed by the plane; server rendering is
+an alternative. Source: [DICOM PS3.18 — Retrieve Transaction](https://dicom.nema.org/medical/dicom/current/output/chtml/part18/sect_10.4.html).
 
-Uso recomendado: manter o DICOM anonimizado como origem/proveniência e gerar um derivado otimizado para o slide. Não substituir o acervo clínico pelos chunks.
+Recommended use: keep anonymized DICOM as the source/provenance and generate an
+optimized derivative for the slide. Do not replace the clinical archive with
+chunks.
 
 ### NIfTI
 
-NIfTI é um contêiner compacto e amplamente interoperável para volumes. O header define dimensões, tipo, espaçamento e transformações `qform`/`sform`; a documentação oficial explica que o inverso dessas transformações permite mapear coordenadas físicas para índices e extrair/interpolar a imagem. Fontes: [NIfTI-1 — dimensões e espaçamento](https://nifti.nimh.nih.gov/nifti-1/documentation/nifti1fields/nifti1fields_pages/dim.html/document_view.html) e [NIfTI-1 — qform e sform](https://nifti.nimh.nih.gov/nifti-1/documentation/nifti1fields/nifti1fields_pages/qsform.html/document_view.html).
+NIfTI is a compact, broadly interoperable container for volumes. Its header
+defines dimensions, type, spacing, and `qform`/`sform` transforms; the official
+documentation explains that the inverse of these transforms maps physical
+coordinates to indices and extracts/interpolates the image. Sources:
+[NIfTI-1 — dimensions and spacing](https://nifti.nimh.nih.gov/nifti-1/documentation/nifti1fields/nifti1fields_pages/dim.html/document_view.html)
+and [NIfTI-1 — qform and sform](https://nifti.nimh.nih.gov/nifti-1/documentation/nifti1fields/nifti1fields_pages/qsform.html/document_view.html).
 
-É uma ótima escolha para um arquivo único de volume derivado e é suficiente para MPR e volume rendering. Sua limitação para este caso é distribuição progressiva: o padrão descreve header seguido do bloco de imagem e não define uma grade interna de chunks 3D. Em um `.nii.gz` comum, o cliente normalmente baixa e descomprime o payload como um todo antes de ter acesso espacial arbitrário. A variante NIfTI-2 amplia dimensões e endereçamento para 64 bits, mas mantém a mesma lógica do NIfTI-1. Fontes: [NIfTI-1 FAQ](https://nifti.nimh.nih.gov/nifti-1/documentation/faq.html) e [NIfTI-2](https://nifti.nimh.nih.gov/nifti-2/).
+It is an excellent choice for one derived-volume file and is sufficient for MPR
+and volume rendering. Its limitation here is progressive delivery: the standard
+describes a header followed by the image block and does not define an internal
+3D chunk grid. In an ordinary `.nii.gz`, the client normally downloads and
+decompresses the entire payload before arbitrary spatial access. NIfTI-2 expands
+dimensions and addressing to 64 bits, but keeps the same NIfTI-1 logic. Sources:
+[NIfTI-1 FAQ](https://nifti.nimh.nih.gov/nifti-1/documentation/faq.html) and
+[NIfTI-2](https://nifti.nimh.nih.gov/nifti-2/).
 
-Uso recomendado: download/intercâmbio e volumes que caibam confortavelmente na memória; menos indicado que Zarr para streaming de MPR no navegador.
+Recommended use: download/interchange and volumes that fit comfortably in
+memory; less suitable than Zarr for browser MPR streaming.
 
-### Zarr e OME-Zarr
+### Zarr and OME-Zarr
 
-Zarr define matrizes N-dimensionais tipadas divididas em chunks, com forma da matriz, tipo, grade de chunks e codecs registrados em metadados. Cada chunk é endereçável separadamente no store. Isso permite solicitar somente os bricks que cruzam o plano de reslice e manter cache dos bricks já decodificados. Fonte: [Zarr v3 Core Specification](https://zarr-specs.readthedocs.io/en/latest/v3/core/v3.0.html).
+Zarr defines typed N-dimensional arrays divided into chunks, with array shape,
+type, chunk grid, and codecs recorded in metadata. Each chunk is independently
+addressable in the store. This makes it possible to request only bricks crossed
+by the reslice plane and cache already decoded bricks. Source:
+[Zarr v3 Core Specification](https://zarr-specs.readthedocs.io/en/latest/v3/core/v3.0.html).
 
-Zarr puro não define semântica médica. OME-Zarr 0.5 acrescenta imagens/volumes de 2 a 5 dimensões, eixos espaciais, unidades, níveis multiscale, transformações por escala/translação e label images. A pirâmide multiscale também é útil para mostrar rapidamente uma versão de baixa resolução antes de carregar bricks finos. Fonte: [OME-Zarr 0.5 Specification](https://ngff.openmicroscopy.org/0.5/).
+Plain Zarr does not define medical semantics. OME-Zarr 0.5 adds 2- to
+5-dimensional images/volumes, spatial axes, units, multiscale levels,
+scale/translation transforms, and label images. The multiscale pyramid is also
+useful for showing a low-resolution version quickly before fine bricks load.
+Source: [OME-Zarr 0.5 Specification](https://ngff.openmicroscopy.org/0.5/).
 
-Limitação importante: no OME-Zarr 0.5 estável, as transformações de cada nível são limitadas a escala e translação. Uma orientação DICOM oblíqua arbitrária não cabe de forma interoperável nessa parte do modelo. Para manter compatibilidade, há duas opções práticas:
+Important limitation: in stable OME-Zarr 0.5, the transforms for each level are
+limited to scale and translation. An arbitrary oblique DICOM orientation does
+not fit interoperably in that part of the model. To maintain compatibility,
+there are two practical options:
 
-- reamostrar o derivado para uma grade ortogonal conhecida antes de escrever OME-Zarr; ou
-- preservar a matriz 4×4/orientação LPS em metadado adicional do aplicativo, sabendo que leitores OME-Zarr genéricos podem ignorá-lo.
+- resample the derivative to a known orthogonal grid before writing OME-Zarr; or
+- preserve the 4×4 LPS orientation/matrix in additional application metadata,
+  knowing that generic OME-Zarr readers may ignore it.
 
-Uso recomendado neste projeto: melhor base para um viewer web com MPR progressivo, preferencialmente servido por HTTP. O formato não deve ser tratado como substituto da semântica clínica DICOM.
+Recommended use in this project: the best foundation for a progressive-MPR web
+viewer, preferably served over HTTP. The format must not be treated as a
+replacement for clinical DICOM semantics.
 
 ### glTF/GLB
 
-glTF é um formato de entrega de assets 3D: cenas, nós, malhas, materiais, câmeras, animações e texturas. `GLB` empacota JSON e dados binários num único arquivo. Isso combina muito bem com uma superfície extraída do exame e viewers WebGL/WebGPU. Fonte: [Khronos glTF 2.0 Specification](https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html).
+glTF is a delivery format for 3D assets: scenes, nodes, meshes, materials,
+cameras, animations, and textures. `GLB` packages JSON and binary data into one
+file. This fits a surface extracted from the study and WebGL/WebGPU viewers very
+well. Source: [Khronos glTF 2.0 Specification](https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html).
 
-glTF 2.0 core **não é um formato de volume médico**: a própria especificação limita as texturas a imagens 2D estáticas. Não há no core uma matriz escalar 3D com geometria física e função de transferência padronizadas. Seria possível inventar `extras` ou uma extensão privada, mas isso repetiria o problema de um formato customizado e não seria entendido por viewers glTF comuns.
+glTF 2.0 core **is not a medical-volume format**: the specification itself
+limits textures to static 2D images. The core has no 3D scalar array with
+physical geometry and standardized transfer function. It would be possible to
+invent `extras` or a private extension, but that would repeat the problem of a
+custom format and would not be understood by common glTF viewers.
 
-Uso recomendado: publicar uma malha segmentada pronta, com materiais e câmera inicial; manter em paralelo o volume se o usuário precisar de MPR, windowing ou volume rendering recalculável.
+Recommended use: publish a ready segmented mesh, with materials and initial
+camera; keep the volume alongside it if the user needs MPR, windowing, or
+recomputable volume rendering.
 
-### DICOM para persistir apresentação ou superfície 3D
+### DICOM for persisting a 3D presentation or surface
 
-Quando o objetivo é preservar o estado clínico de um volume rendering, DICOM define o **Volume Rendering Volumetric Presentation State**: registro, crop, geometria, shading, mapeamento escalar para RGB/alpha, composição, anotações e referência a uma imagem que representa a vista. Ele referencia os volumes de origem; não é um substituto autocontido para eles. Fontes: [DICOM PS3.3 — Volume Rendering VPS](https://dicom.nema.org/medical/dicom/current/output/chtml/part03/sect_a.80.2.html) e [DICOM PS3.17 — vantagens e limitações dos Volumetric Presentation States](https://dicom.nema.org/medical/dicom/current/output/chtml/part17/sect_xxx.2.2.html).
+When the goal is to preserve a volume-rendering clinical state, DICOM defines a
+**Volume Rendering Volumetric Presentation State**: registration, crop,
+geometry, shading, scalar-to-RGB/alpha mapping, compositing, annotations, and a
+reference to an image representing the view. It references the source volumes;
+it is not a self-contained replacement for them. Sources: [DICOM PS3.3 — Volume
+Rendering VPS](https://dicom.nema.org/medical/dicom/current/output/chtml/part03/sect_a.80.2.html)
+and [DICOM PS3.17 — benefits and limitations of Volumetric Presentation States](https://dicom.nema.org/medical/dicom/current/output/chtml/part17/sect_xxx.2.2.html).
 
-Para superfícies, o padrão define **Surface Segmentation**, com vértices e primitivas de malha, e também encapsulamento de OBJ/STL para modelos 3D vinculados ao estudo. Fontes: [DICOM PS3.3 — Surface Mesh Module](https://dicom.nema.org/medical/dicom/current/output/chtml/part03/sect_c.27.html) e [DICOM PS3.3 — Encapsulated OBJ IOD](https://dicom.nema.org/medical/dicom/current/output/chtml/part03/sect_a.85.2.html).
+For surfaces, the standard defines **Surface Segmentation**, with mesh vertices
+and primitives, and also encapsulation of OBJ/STL for 3D models linked to the
+study. Sources: [DICOM PS3.3 — Surface Mesh Module](https://dicom.nema.org/medical/dicom/current/output/chtml/part03/sect_c.27.html)
+and [DICOM PS3.3 — Encapsulated OBJ IOD](https://dicom.nema.org/medical/dicom/current/output/chtml/part03/sect_a.85.2.html).
 
-Essas opções são mais fortes para interoperabilidade/proveniência clínica, enquanto glTF/GLB costuma ser mais simples para entrega visual na web.
+These options are stronger for clinical interoperability/provenance, whereas
+glTF/GLB is usually simpler for visual web delivery.
 
-## Avaliação dos chunks deste repositório
+## Evaluation of this repository's chunks
 
-O `dicom-slide-volume/1` já preserva os valores `Int16` após Rescale Slope/Intercept, além de dimensões, espaçamento, orientação LPS e uma coordenada por corte. Portanto, para a série ortogonal e regular de exemplo, **os pixels são suficientes para implementar MPR local**; falta principalmente o algoritmo do viewer.
+`dicom-slide-volume/1` already preserves `Int16` values after Rescale
+Slope/Intercept, together with dimensions, spacing, LPS orientation, and one
+coordinate per slice. Therefore, for the orthogonal, regular example series,
+**pixels are sufficient to implement local MPR**; what is principally missing is
+the viewer algorithm.
 
-Há, porém, dois limites estruturais:
+There are two structural limits, however:
 
-1. cada chunk é uma laje de 12 cortes axiais completos; um corte axial usa uma laje, mas um corte coronal, sagital ou oblíquo atravessa quase todas as lajes e tende a baixar/descomprimir o volume inteiro;
-2. o manifesto não guarda a `ImagePositionPatient` tridimensional completa do primeiro frame nem uma matriz voxel→LPS 4×4. `orientationLPS` mais a projeção escalar em `sliceCoordinates` não recuperam a translação completa no espaço do paciente. Isso impede registro confiável com outra série, segmentação ou anotação, mesmo que o MPR isolado pareça correto.
+1. each chunk is a slab of 12 complete axial slices; an axial slice uses one
+   slab, but a coronal, sagittal, or oblique slice crosses nearly every slab and
+   tends to download/decompress the whole volume;
+2. the manifest does not retain the complete three-dimensional
+   `ImagePositionPatient` of the first frame or a voxel→LPS 4×4 matrix.
+   `orientationLPS` plus the scalar projection in `sliceCoordinates` cannot
+   recover the complete translation in patient space. This prevents reliable
+   registration with another series, segmentation, or annotation, even if an
+   isolated MPR looks correct.
 
-Além disso, gzip+base64 dentro de JavaScript é uma adaptação útil para `file://`, mas o base64 aumenta o payload e cada laje precisa ser decodificada por inteiro. Em GitHub Pages/HTTP, chunks binários eliminariam esse wrapper.
+In addition, gzip+base64 inside JavaScript is a useful adaptation for `file://`,
+but base64 increases the payload and each slab must be decoded in full. On
+GitHub Pages/HTTP, binary chunks would eliminate this wrapper.
 
-## Recomendação concreta para o projeto
+## Concrete recommendation for this project
 
-### Se a prioridade continuar sendo “abrir por duplo clique”
+### If the priority remains “open by double-clicking”
 
-Evoluir o formato customizado sem adotar dependências:
+Evolve the custom format without adopting dependencies:
 
-- trocar lajes axiais por uma grade de bricks 3D;
-- adicionar `chunkShape`, `gridShape`, ordem dos eixos e índice `(z,y,x)` de cada brick;
-- adicionar uma matriz afim voxel→LPS 4×4 e, se necessário, posições completas por frame;
-- continuar com wrappers `.js`/base64 apenas no pacote `file://`;
-- guardar estado de volume rendering em JSON separado: câmera, projeção, crop, função de transferência RGBA, shading e referências ao volume/segmentações.
+- replace axial slabs with a 3D brick grid;
+- add `chunkShape`, `gridShape`, axis order, and `(z,y,x)` index for every
+  brick;
+- add a voxel→LPS 4×4 affine matrix and, when necessary, complete per-frame
+  positions;
+- keep `.js`/base64 wrappers only in the `file://` package; and
+- store volume-rendering state in separate JSON: camera, projection, crop, RGBA
+  transfer function, shading, and references to the volume/segmentations.
 
-Isso é suficiente para MPR e volume rendering, mas continua sendo um protocolo privado.
+This is sufficient for MPR and volume rendering, but remains a private protocol.
 
-### Se a prioridade for eficiência e interoperabilidade web
+### If the priority is web efficiency and interoperability
 
-Usar duas camadas:
+Use two layers:
 
-1. **DICOM anonimizado como fonte canônica**;
-2. **OME-Zarr/Zarr com chunks 3D como derivado web**, mais metadado explícito para HU e matriz LPS quando necessário.
+1. **Anonymized DICOM as the canonical source**;
+2. **OME-Zarr/Zarr with 3D chunks as the web derivative**, plus explicit
+   metadata for HU and the LPS matrix when necessary.
 
-Escolher o tamanho dos bricks medindo o padrão real de navegação e a compressão; não existe um tamanho universal. Um primeiro teste deve equilibrar axial, coronal, sagital, oblíquo e volume rendering, em vez de otimizar apenas o scroll axial.
+Choose brick size by measuring the real navigation and compression pattern; no
+universal size exists. An initial test should balance axial, coronal, sagittal,
+oblique, and volume rendering, rather than optimizing only axial scrolling.
 
-Para exportação:
+For export:
 
-- oferecer NIfTI como arquivo único do volume derivado;
-- oferecer GLB somente para malhas segmentadas;
-- oferecer PNG/WebP/vídeo para a vista final;
-- se houver requisito clínico de reproduzir a apresentação, avaliar DICOM Volumetric Presentation State junto com os objetos DICOM referenciados.
+- offer NIfTI as one derived-volume file;
+- offer GLB only for segmented meshes;
+- offer PNG/WebP/video for the final view; and
+- if there is a clinical requirement to reproduce the presentation, evaluate
+  DICOM Volumetric Presentation State with its referenced DICOM objects.
 
-## Decisão resumida
+## Decision summary
 
-| Necessidade | Escolha recomendada |
+| Need | Recommended choice |
 |---|---|
-| Fonte clínica e proveniência | DICOM |
-| MPR simples em arquivo único | NIfTI |
-| MPR/volume rendering progressivo no navegador | Zarr/OME-Zarr com bricks 3D |
-| Manter o modo `file://` sem dependências | formato customizado evoluído para bricks 3D |
-| Persistir parâmetros de volume rendering | estado JSON do app; DICOM VPS quando interoperabilidade clínica justificar |
-| Superfície 3D pronta para a web | glTF/GLB |
-| Superfície com contexto clínico DICOM | DICOM Surface Segmentation ou OBJ/STL encapsulado |
-| Aparência final | PNG/WebP ou vídeo |
+| Clinical source and provenance | DICOM |
+| Simple MPR in one file | NIfTI |
+| Progressive browser MPR/volume rendering | Zarr/OME-Zarr with 3D bricks |
+| Keep dependency-free `file://` mode | custom format evolved to 3D bricks |
+| Persist volume-rendering parameters | application JSON state; DICOM VPS when clinical interoperability justifies it |
+| Ready 3D surface for the web | glTF/GLB |
+| Surface with DICOM clinical context | DICOM Surface Segmentation or encapsulated OBJ/STL |
+| Final appearance | PNG/WebP or video |

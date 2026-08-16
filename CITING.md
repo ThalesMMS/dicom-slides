@@ -1,37 +1,33 @@
-# Como citar
+# How to cite
 
-## Este projeto
+## This project
 
-Em apresentações, inclua a seguinte referência e substitua o campo de URL pelo
-endereço do repositório publicado:
+Include this reference in presentations:
 
-> SANTOS, Thales Matheus Mendonça. **DICOM Slide: visualizador 2D, MPR e 3D**.
-> Software, 2026. Disponível em: `<URL do repositório GitHub>`.
+> Santos, T. M. M. (2026). *DICOM Slide: 2D, MPR, and 3D viewer* [Software]. https://github.com/ThalesMMS/dicom-slides
 
-Forma curta para rodapé de slide:
+Short form for a slide footer:
 
-> DICOM Slide — Thales Matheus Mendonça Santos (2026), licença MIT.
+> DICOM Slide — Thales Matheus Mendonça Santos (2026), MIT license.
 
-O arquivo [`CITATION.cff`](CITATION.cff) permite que o GitHub gere a citação
-automaticamente. Depois de publicar, acrescente ao CFF a URL definitiva e, se
-houver, a versão/DOI da release.
+[`CITATION.cff`](CITATION.cff) lets GitHub generate the citation automatically.
 
-## Quando uma imagem do Visible Human aparecer
+## When a Visible Human image appears
 
-Use, no próprio slide ou nos créditos finais:
+Use this on the slide itself or in final credits:
 
-> Dados de TC: Visible Human Project. Courtesy of the U.S. National Library of
-> Medicine. Imagens derivadas (recorte abdominal, redução 2× e conversão para
-> HU) pelo projeto DICOM Slide. A atribuição não implica endosso da NLM.
+> CT data: Visible Human Project. Courtesy of the U.S. National Library of
+> Medicine. Derived images (abdominal crop, 2× reduction, and conversion to HU)
+> by the DICOM Slide project. This attribution does not imply NLM endorsement.
 
-## Quando uma imagem do MRI-DIR aparecer
+## When an MRI-DIR image appears
 
-Forma curta para o slide:
+Short form for the slide:
 
-> MRI-DIR, The Cancer Imaging Archive (TCIA), CC BY 4.0. Caso MRI-DIR-T1_1;
-> reempacotado pelo projeto DICOM Slide. doi:10.7937/K9/TCIA.2018.3f08iejt.
+> MRI-DIR, The Cancer Imaging Archive (TCIA), CC BY 4.0. Case MRI-DIR-T1_1;
+> repackaged by the DICOM Slide project. doi:10.7937/K9/TCIA.2018.3f08iejt.
 
-Nos créditos ou referências, inclua a citação completa:
+In credits or references, include the complete citation:
 
 > Ger, R. B., Yang, J., Ding, Y., Jacobsen, M. C., Cardenas, C. E., Fuller,
 > C. D., Howell, R. M., Li, H., Stafford, R. J., Zhou, S., & Court, L. (2018).
@@ -39,14 +35,14 @@ Nos créditos ou referências, inclua a citação completa:
 > Registration Accuracy (MRI-DIR)* (Version 1). The Cancer Imaging Archive.
 > https://doi.org/10.7937/K9/TCIA.2018.3f08iejt
 
-Se a apresentação tiver um slide de métodos, esclareça que as quatro séries de
-RM são imagens sintéticas/modeladas para pesquisa de registro deformável, e não
-um exame clínico multissequência.
+If the presentation includes a methods slide, explain that the four MR series
+are synthetic/modelled images for deformable-registration research, not a
+multi-sequence clinical study.
 
-## Exemplo de créditos finais
+## Example final credits
 
-> Software: DICOM Slide, Thales Matheus Mendonça Santos (2026), MIT. Dados:
+> Software: DICOM Slide, Thales Matheus Mendonça Santos (2026), MIT. Data:
 > Visible Human Project — Courtesy of the U.S. National Library of Medicine;
 > MRI-DIR — Ger et al. (2018), The Cancer Imaging Archive, CC BY 4.0,
-> doi:10.7937/K9/TCIA.2018.3f08iejt. Uso demonstrativo; não destinado a
-> diagnóstico.
+> doi:10.7937/K9/TCIA.2018.3f08iejt. Demonstration use; not intended for
+> diagnosis.

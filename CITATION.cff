@@ -1,15 +1,17 @@
 cff-version: 1.2.0
 message: "If you use this software, please cite it and the displayed imaging dataset as described in CITING.md."
-title: "DICOM Slide: visualizador 2D, MPR e 3D"
+title: "DICOM Slide: 2D, MPR, and 3D viewer"
 type: software
 authors:
   - family-names: "Santos"
     given-names: "Thales Matheus Mendonça"
 license: MIT
 date-released: "2026-08-16"
+repository-code: "https://github.com/ThalesMMS/dicom-slides"
+url: "https://github.com/ThalesMMS/dicom-slides"
 preferred-citation:
   type: software
-  title: "DICOM Slide: visualizador 2D, MPR e 3D"
+  title: "DICOM Slide: 2D, MPR, and 3D viewer"
   authors:
     - family-names: "Santos"
       given-names: "Thales Matheus Mendonça"
