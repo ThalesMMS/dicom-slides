@@ -236,7 +236,7 @@ const baseUrl = process.env.DICOM_SLIDE_BASE_URL || "http://127.0.0.1:8765";
     await page.locator("[data-volume-action='toggle-sliders']").click();
 
     const shadingButton = page.locator("[data-volume-action='shading']");
-    assert.equal(await shadingButton.getAttribute("aria-pressed"), "true", "Bones B/W recomenda sombreamento");
+    assert.equal(await shadingButton.getAttribute("aria-pressed"), "true", "Bones B/W recommends shading");
     await shadingButton.click();
     assert.equal(await page.evaluate(() => window.viewer.viewer.volumeView.getState().shading), false);
     await page.locator('[data-volume-control="transfer-function"]').selectOption("airways");
