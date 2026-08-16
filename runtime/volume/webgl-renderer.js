@@ -64,10 +64,10 @@
     return sign | (exponent << 10) | (mantissa >>> 13);
   }
 
-  // O raycaster amostra o volume com filtragem trilinear, o que exige uma
-  // textura filtrável: os voxels Int16 viram meia precisão normalizada sobre
-  // [minimum, maximum]. Como só existem 65 536 valores Int16 possíveis, a
-  // conversão passa por uma tabela e o laço por voxel fica em uma indexação.
+  // The raycaster samples the volume with trilinear filtering, which requires a
+  // filterable texture: Int16 voxels become normalized half precision over
+  // [minimum, maximum]. With only 65,536 possible Int16 values, conversion uses
+  // a lookup table and the per-voxel loop is one indexed read.
   function encodeHalfVolume(voxels, minimum, maximum) {
     const span = Math.max(1, maximum - minimum);
     const lookup = new Uint16Array(65536);
@@ -217,9 +217,9 @@
           }
           return left.y;
         }
-        // VOI LINEAR do DICOM. Seguindo a Isis (#1588), o valor janelado é o
-        // ÍNDICE do LUT inteiro: cor e opacidade saem do preset na posição que
-        // a janela escolheu, então o arrasto W/L varre o preset pelo volume.
+        // DICOM VOI LINEAR. Following Isis (#1588), the windowed value indexes
+        // the entire LUT: color and opacity come from the position selected by
+        // the window, so W/L drag sweeps the preset through the volume.
         float windowedUnit(float value){
           return uWidth<=1.0
             ? step(uLevel-0.5,value)
@@ -232,8 +232,8 @@
             sampleValue(tc+vec3(0.0,0.0,uTexelStep.z))-sampleValue(tc-vec3(0.0,0.0,uTexelStep.z))
           );
         }
-        // Blinn-Phong com luz de cabeça (luz = olho): a normal é o gradiente do
-        // volume corrigido pela anisotropia do espaçamento, apontando para fora.
+        // Blinn-Phong with a headlight (light = eye): the normal is the outward
+        // volume gradient corrected for spacing anisotropy.
         float shadeWithGradient(vec3 gradient, vec3 viewDirection){
           const float ambient=0.3;
           vec3 world=gradient*uGradientWorld;
@@ -256,8 +256,8 @@
           vec3 halfSize=0.5*uScale;
           vec2 range=hitBox(ro,rd,halfSize);
           if(range.y<=max(range.x,0.0)){outColor=vec4(0.0,0.0,0.0,1.0);return;}
-          // Um deslocamento pseudoaleatório de até um passo espalha o resíduo de
-          // banda em ruído fino em vez de anéis concêntricos.
+          // A pseudorandom offset up to one step distributes banding residue as
+          // fine noise instead of concentric rings.
           float jitter=fract(sin(dot(gl_FragCoord.xy,vec2(12.9898,78.233)))*43758.5453);
           float t=max(range.x,0.0)+jitter*uStepLength;
           vec3 accumulated=vec3(0.0);
@@ -305,8 +305,8 @@
       const prepared = downsampleNearest(this.volume.voxels, this.volume.dimensions, this.stride);
       this.textureDimensions = prepared.dimensions;
       this.textureSpacing = this.volume.spacing.map((value) => value * this.stride);
-      // A faixa real dos voxels enviados é o que define a precisão da meia
-      // precisão normalizada, então ela é medida em vez de herdada do manifesto.
+      // The actual range of uploaded voxels defines normalized half-precision
+      // accuracy, so it is measured rather than inherited from the manifest.
       this.valueRange = measureValueRange(prepared.voxels, this.volume.valueRange);
       const encoded = encodeHalfVolume(prepared.voxels, this.valueRange.minimum, this.valueRange.maximum);
       this.texture = gl.createTexture();
@@ -350,7 +350,7 @@
         if (event.button !== 0 && event.button !== 2) return;
         drag = {
           mode: "volume",
-          // Botão direito ou Alt: zoom, como na pilha 2D.
+          // Right mouse button or Alt: zoom, as in the 2D stack.
           tool: event.button === 2 || event.altKey ? "zoom" : state.volumeTool,
           startX: event.clientX,
           startY: event.clientY,
@@ -392,8 +392,8 @@
       }, { passive: false });
     }
 
-    // Desenha um quadro barato agora e reagenda o quadro de qualidade plena para
-    // quando a interação parar.
+    // Draws a low-cost frame now and reschedules the full-quality frame for when
+    // interaction stops.
     renderInteractive(state) {
       if (this.failed) return;
       this.render(state, true);
@@ -427,9 +427,8 @@
       const transfer = packTransferFunction(state.transferFunctionId, this.transferDomain, state.volumeShift);
       const quality = clamp(Math.round(state.quality), 8, MAX_RAY_STEPS);
       const steps = preview ? Math.min(PREVIEW_RAY_STEPS, quality) : quality;
-      // O passo é constante em unidades do mundo (diagonal física / passos), de
-      // modo que a opacidade acumulada não dependa da espessura atravessada nem
-      // do ângulo da câmera.
+      // The step is constant in world units (physical diagonal / steps), so
+      // accumulated opacity does not depend on traversed thickness or camera angle.
       const diagonal = Math.hypot(...scale);
       gl.uniformMatrix3fv(this.locations.uRotation, false, buildOrbitCamera(this.cameraFrame, state.yaw, state.pitch).rotation);
       gl.uniform3fv(this.locations.uScale, new Float32Array(scale));
@@ -437,8 +436,8 @@
       gl.uniform3fv(this.locations.uGradientWorld, new Float32Array(
         this.textureDimensions.map((value, index) => value / Math.max(1e-6, scale[index]))
       ));
-      // O gradiente é medido entre texels da textura da GPU; dividir pelo stride
-      // devolve a escala "por voxel original" em que os presets foram calibrados.
+      // The gradient is measured between GPU texture texels; dividing by stride
+      // restores the "per original voxel" scale used to calibrate presets.
       gl.uniform1f(this.locations.uGradientVoxelScale, 1 / Math.max(1, this.stride));
       gl.uniform2fv(this.locations.uAspect, new Float32Array(aspect));
       gl.uniform2fv(this.locations.uPan, new Float32Array([

@@ -35,8 +35,8 @@
       this.range = volume.valueRange;
       this.coordinateSystem = String(volume.coordinateSystem || "LPS").toUpperCase();
       this.windowLevelMultiplier = computeWindowLevelMultiplier(this.voxels, this.dimensions, this.range);
-      // Presets ancorados em HU só fazem sentido em séries Hounsfield; nas
-      // demais o domínio canônico é remapeado sobre a faixa da série.
+      // HU-anchored presets only make sense for Hounsfield series; other series
+      // remap the canonical domain over their value range.
       this.transferDomain = String(volume.windowing && volume.windowing.unit).toUpperCase() === "HU"
         ? null
         : { minimum: this.range[0], maximum: this.range[1] };
@@ -49,8 +49,8 @@
       };
       const center = finiteOr(this.options.center, this.defaultWindow.center);
       const width = Math.max(1, finiteOr(this.options.width, this.defaultWindow.width));
-      // O W/L do 3D nasce no domínio nativo do preset default (a janela herdada
-      // do 2D segue valendo para o MPR).
+      // 3D W/L starts in the default preset's native domain (the window inherited
+      // from 2D remains valid for MPR).
       const volumeWindow = transferFunctionWindow(DEFAULT_TRANSFER_FUNCTION_ID, this.transferDomain);
       this.state = {
         mode: this.options.initialMode === "volume" ? "volume" : "mpr",
@@ -70,8 +70,8 @@
         volumePanX: 0,
         volumePanY: 0,
         volumeShift: 0,
-        // Os sliders são detalhe avançado: começam escondidos nos dois modos e o
-        // botão "Sliders" de cada painel os revela.
+        // Sliders are an advanced detail: they start hidden in both modes and
+        // each panel's "Sliders" button reveals them.
         mprSlidersHidden: true,
         volumeSlidersHidden: true,
         transferFunctionId: DEFAULT_TRANSFER_FUNCTION_ID,
@@ -187,7 +187,7 @@
     _bindControls() {
       const [minimum, maximum] = this.range;
       const widthMaximum = Math.max(1, Math.ceil((maximum - minimum) * 1.5));
-      // O passo do shift segue o VolumeShift do OHIF: 10^floor(log10(span/500)).
+      // The shift step follows OHIF VolumeShift: 10^floor(log10(span/500)).
       const shiftSpan = Math.max(1, maximum - minimum);
       const shiftStep = Math.max(Math.pow(10, Math.floor(Math.log10(shiftSpan / 500))), 0.01);
       const definitions = {
@@ -285,7 +285,7 @@
         canvas.addEventListener("pointerdown", (event) => {
           if (this.state.mode !== "mpr") return;
           if (event.button !== 0 && event.button !== 2) return;
-          // Botão direito ou Alt: zoom, como na pilha 2D.
+          // Right mouse button or Alt: zoom, as in the 2D stack.
           const tool = event.button === 2 || event.altKey ? "zoom" : this.state.mprTool;
           const transform = this.state.mprTransforms[plane];
           const fixedAxis = this.planes[plane].fixed.axis;
@@ -417,7 +417,7 @@
         this.state.volumePanX = 0;
         this.state.volumePanY = 0;
         this.state.volumeShift = 0;
-        // selectTransferFunction devolve o W/L ao domínio nativo do preset.
+        // selectTransferFunction returns W/L to the preset's native domain.
         selectTransferFunction(this.state, DEFAULT_TRANSFER_FUNCTION_ID, this.transferDomain);
         this.state.quality = DEFAULT_QUALITY_STEPS;
         this.state.yaw = 0;
@@ -481,8 +481,8 @@
       this._syncCursors();
     }
 
-    // Seleção de ferramenta pelo teclado (encaminhada pelo viewer 2D): aplica ao
-    // modo ativo e ignora ferramentas que não existem nele.
+    // Keyboard tool selection (forwarded by the 2D viewer) applies to the active
+    // mode and ignores tools unavailable in that mode.
     setTool(tool) {
       if (this.state.mode === "mpr" && MPR_TOOLS.includes(tool)) this.state.mprTool = tool;
       else if (this.state.mode === "volume" && VOLUME_TOOLS.includes(tool)) this.state.volumeTool = tool;
@@ -510,8 +510,8 @@
       }
     }
 
-    // Arrastes e sliders passam por aqui: o 3D responde com um quadro de
-    // rascunho e volta sozinho à qualidade plena quando a interação para.
+    // Drags and sliders pass through here: 3D renders a draft frame and returns
+    // to full quality when interaction stops.
     renderInteractive() {
       if (this.destroyed) return;
       if (this.state.mode === "volume" && this.volumeRenderer) {

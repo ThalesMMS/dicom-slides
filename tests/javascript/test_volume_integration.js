@@ -25,6 +25,12 @@ const runtimeScripts = [
   "runtime/volume/mpr-viewer.js",
   "runtime/volume/volume-viewer.js",
 ];
+const portugueseRuntimeProse = /\b(?:Módulo volumétrico|Arrasto|janela padrão|série|séries|sombreamento|usuário|botão|domínio|opacidade|câmera|faixa dinâmica|qualidade plena|não inicializado)\b/iu;
+const runtimeProseFiles = [...runtimeScripts, "runtime/core/viewer.js"];
+for (const filename of runtimeProseFiles) {
+  const source = fs.readFileSync(path.join(root, filename), "utf8");
+  assert.doesNotMatch(source, portugueseRuntimeProse, `${filename} still contains Portuguese prose`);
+}
 for (const filename of runtimeScripts) {
   vm.runInContext(fs.readFileSync(path.join(root, filename), "utf8"), context, { filename });
 }
@@ -115,9 +121,8 @@ const toolState = {
   pitch: 0.25,
   zoom: 1.5,
 };
-// Arrasto W/L com a semântica do WindowLevelTool do cornerstone3D: um único
-// multiplicador para os dois eixos — horizontal soma na largura, vertical soma
-// no centro.
+// W/L drag follows cornerstone3D WindowLevelTool semantics: one multiplier for
+// both axes — horizontal adds to width and vertical adds to center.
 api.applyVolumetricToolDrag(toolState, {
   mode: "volume", tool: "window", center: 300, width: 600, multiplier: 3,
 }, 10, -4);
@@ -128,7 +133,7 @@ api.applyVolumetricToolDrag(toolState, {
 }, -6, 8);
 assert.equal(toolState.mprWidth, 197);
 assert.equal(toolState.mprCenter, 104);
-// Sem multiplicador válido, cai no padrão 4 do cornerstone3D.
+// Without a valid multiplier, use cornerstone3D's default of 4.
 api.applyVolumetricToolDrag(toolState, {
   mode: "mpr", tool: "window", center: 104, width: 197,
 }, 1, 1);
@@ -139,21 +144,21 @@ toolState.mprWidth = 200;
 toolState.volumeCenter = 300;
 toolState.volumeWidth = 600;
 
-// O multiplicador vem da faixa dinâmica do corte central / 1024 (arredondado
-// acima de 1), limitado pela faixa declarada; corte uniforme cai no padrão 4.
+// The multiplier comes from central-slice dynamic range / 1024 (rounded above
+// 1), bounded by the declared range; a uniform slice uses the default of 4.
 {
   const dims = [4, 4, 3];
   const plane = dims[0] * dims[1];
   const voxels = new Int16Array(plane * dims[2]);
   voxels[plane] = -1024;
-  voxels[plane + 1] = 1976; // corte central: faixa 3000 → 3000/1024 ≈ 2,93 → 3
+  voxels[plane + 1] = 1976; // central slice: range 3000 → 3000/1024 ≈ 2.93 → 3
   assert.equal(api.computeWindowLevelMultiplier(voxels, dims, [-1024, 3071]), 3);
   assert.equal(api.computeWindowLevelMultiplier(voxels, dims, [-100, 156]), 0.25);
   const flat = new Int16Array(plane * dims[2]).fill(7);
   assert.equal(api.computeWindowLevelMultiplier(flat, dims, [-1024, 3071]), 4);
 }
 
-// Scroll no MPR: arrasto vertical percorre os cortes do plano (~8 px/corte).
+// MPR scroll: vertical drag traverses plane slices (about 8 px per slice).
 toolState.crosshair = [10, 20, 30];
 api.applyVolumetricToolDrag(toolState, {
   mode: "mpr", tool: "scroll", plane: "axial", axis: 2, axisSize: 100, slice: 30,
@@ -162,7 +167,7 @@ assert.equal(toolState.crosshair[2], 34);
 api.applyVolumetricToolDrag(toolState, {
   mode: "mpr", tool: "scroll", plane: "axial", axis: 2, axisSize: 100, slice: 30,
 }, 0, -9999);
-assert.equal(toolState.crosshair[2], 0, "O scroll fixa nos limites do eixo");
+assert.equal(toolState.crosshair[2], 0, "MPR scrolling must clamp to the axis bounds");
 
 api.applyVolumetricToolDrag(toolState, {
   mode: "mpr", tool: "pan", plane: "axial", panX: 2, panY: 3,
@@ -193,8 +198,8 @@ assert.deepEqual(
 assert.equal(api.DEFAULT_TRANSFER_FUNCTION_ID, "bones-skin-1");
 assert.equal(api.getTransferFunction("missing").id, "bones-skin-1");
 
-// As paradas ficam em unidades da modalidade (HU), não em 0..1 normalizado, e a
-// interpolação continua fixando os valores fora do intervalo nas extremidades.
+// Stops remain in modality units (HU), not normalized 0..1, and interpolation
+// continues clamping out-of-range values at the endpoints.
 assert.deepEqual(JSON.parse(JSON.stringify(api.TRANSFER_HU_DOMAIN)), [-1000, 1800]);
 assert.equal(api.sampleTransferStops([{ position: 0, value: 0 }, { position: 1, value: 1 }], 0.25), 0.25);
 assert.equal(api.sampleTransferStops([{ position: 150, value: 0 }, { position: 700, value: 0.65 }], -300), 0);
@@ -226,32 +231,31 @@ assert.equal(packedBones.colorStops.length, 32);
 assert.equal(packedBones.opacityStops.length, 16);
 assert.equal(packedBones.shading, true);
 assert.equal(packedBones.gradientOpacityScale, 220);
-// Modelo da Isis (#1588): cor E opacidade saem normalizadas 0..1 sobre o
-// domínio nativo compartilhado do preset (-1000..1800 para "Bones and skin 1"),
-// e o valor janelado indexa o LUT inteiro — o W/L varre o preset pelo volume.
+// Isis model (#1588): color and opacity normalize to 0..1 over the shared native
+// preset domain (-1000..1800 for "Bones and skin 1"), and the windowed value
+// indexes the entire LUT — W/L sweeps the preset through the volume.
 assert.equal(packedBones.colorStops[3], 0);
 assert.equal(packedBones.colorStops[4 * 4 + 3], 1);
 assert.ok(Math.abs(packedBones.colorStops[1 * 4 + 3] - (800 / 2800)) < 1e-6);
 assert.ok(Math.abs(packedBones.opacityStops[0] - (750 / 2800)) < 1e-6);
-// O preset carrega a própria janela (applyPreset): domínio -1000..1800 → C 400/W 2800.
+// The preset supplies its own window (applyPreset): domain -1000..1800 → C 400/W 2800.
 assert.deepEqual(JSON.parse(JSON.stringify(packedBones.window)), { center: 400, width: 2800 });
 assert.deepEqual(JSON.parse(JSON.stringify(api.transferFunctionWindow("bones-skin-1"))), { center: 400, width: 2800 });
-// Angio: cor 100..700 e opacidade 150..500 → domínio compartilhado 100..700.
+// Angio: color 100..700 and opacity 150..500 → shared domain 100..700.
 assert.deepEqual(JSON.parse(JSON.stringify(api.transferFunctionDomain("angio"))), { minimum: 100, maximum: 700, span: 600 });
-// A cor sai em luz linear; o branco continua branco e o cinza escurece.
+// Color uses linear light; white remains white and gray becomes darker.
 assert.equal(api.srgbToLinear(1), 1);
 assert.equal(api.srgbToLinear(0), 0);
 assert.ok(api.srgbToLinear(0.5) < 0.25);
 
-// O shift translada apenas os pontos de opacidade (shiftVolumeOpacityPoints),
-// em unidades do volume convertidas para o espaço normalizado do preset.
+// Shift translates only opacity points (shiftVolumeOpacityPoints), in volume
+// units converted to normalized preset space.
 const shifted = api.packTransferFunction("bones-skin-1", null, 100);
 assert.ok(Math.abs(shifted.opacityStops[0] - (850 / 2800)) < 1e-6);
-assert.equal(shifted.colorStops[3], 0, "O shift não move a rampa de cor");
+assert.equal(shifted.colorStops[3], 0, "The shift must not move the color ramp");
 
-// Uma série sem HU remapeia o domínio canônico sobre a faixa do volume: as
-// paradas normalizadas não mudam, mas a janela nativa e o limiar de gradiente
-// seguem a escala.
+// A non-HU series remaps the canonical domain over the volume range: normalized
+// stops remain unchanged while native window and gradient threshold scale.
 const remapped = api.packTransferFunction("bones-skin-1", { minimum: 0, maximum: 2800 });
 assert.equal(api.transferDomainMapping({ minimum: 0, maximum: 2800 }).scale, 1);
 assert.ok(Math.abs(remapped.opacityStops[0] - (750 / 2800)) < 1e-6);
@@ -263,10 +267,10 @@ assert.equal(halved.gradientOpacityScale, 110);
 
 const shadingState = { transferFunctionId: "bones-skin-1", shading: true };
 api.selectTransferFunction(shadingState, "airways");
-assert.equal(shadingState.shading, false, "Trocar de preset adota o sombreamento recomendado por ele");
+assert.equal(shadingState.shading, false, "Selecting a preset must adopt its recommended shading");
 api.selectTransferFunction(shadingState, "angio");
 assert.equal(shadingState.shading, true);
-// E adota a janela nativa do preset (domínio 100..700 → C 400/W 600).
+// It also adopts the preset's native window (domain 100..700 → C 400/W 600).
 assert.equal(shadingState.volumeCenter, 400);
 assert.equal(shadingState.volumeWidth, 600);
 
@@ -291,8 +295,8 @@ const preservedTransferState = [
 ];
 api.selectTransferFunction(transferState, "bones-bw");
 assert.equal(transferState.transferFunctionId, "bones-bw");
-// A câmera é preservada; o W/L volta ao domínio nativo do novo preset
-// (150..1800 → C 975/W 1650), como no applyPreset do OHIF.
+// The camera is preserved; W/L returns to the new preset's native domain
+// (150..1800 → C 975/W 1650), as in OHIF applyPreset.
 assert.equal(transferState.volumeCenter, 975);
 assert.equal(transferState.volumeWidth, 1650);
 assert.deepEqual([

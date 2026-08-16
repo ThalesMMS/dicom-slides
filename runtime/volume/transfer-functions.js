@@ -5,9 +5,9 @@
   const volume = internal.volume || (internal.volume = {});
 
   const MAX_TRANSFER_STOPS = 8;
-  // O passo precisa ficar abaixo de um voxel para não produzir os anéis de
-  // "wood grain" típicos de amostragem grosseira; a interação usa a contagem
-  // reduzida e o quadro assentado volta à qualidade escolhida.
+  // The step must remain below one voxel to avoid "wood grain" rings from
+  // coarse sampling; interaction uses fewer steps and the settled frame
+  // returns to the selected quality.
   const MAX_RAY_STEPS = 512;
   const PREVIEW_RAY_STEPS = 96;
   const SETTLE_DELAY_MS = 130;
@@ -17,7 +17,7 @@
   const MPR_TOOLS = Object.freeze(["crosshair", "window", "pan", "zoom", "scroll"]);
   const VOLUME_TOOLS = Object.freeze(["window", "pan", "zoom", "rotate"]);
 
-  // Zoom inicial mais fechado em todos os modos, com teto alto para inspeção.
+  // Start with a tighter zoom in every mode, with a high inspection limit.
   const MPR_DEFAULT_ZOOM = 1.3;
   const MPR_MIN_ZOOM = 0.25;
   const MPR_MAX_ZOOM = 40;
@@ -25,10 +25,10 @@
   const VOLUME_MIN_ZOOM = 0.62;
   const VOLUME_MAX_ZOOM = 8;
 
-  // As funções de transferência 3D são ancoradas em unidades da modalidade (HU),
-  // como no renderizador de referência: a janela apenas modula a opacidade de
-  // cada amostra, sem reposicionar as paradas da função. Séries sem HU remapeiam
-  // este domínio canônico sobre a faixa de valores do volume.
+  // 3D transfer functions are anchored in modality units (HU), matching the
+  // reference renderer: windowing only modulates each sample's opacity without
+  // repositioning transfer stops. Non-HU series remap this canonical domain to
+  // the volume value range.
   const TRANSFER_HU_DOMAIN = Object.freeze([-1000, 1800]);
 
   const BONE_OPACITY_STOPS = Object.freeze([
@@ -59,8 +59,8 @@
         { position: 1800, value: 0.95 },
       ],
       shading: true,
-      // A modulação por gradiente mantém a casca de pele e o crânio limpos em vez
-      // de acumular um borrão de partes moles.
+      // Gradient modulation keeps the skin shell and skull clean instead of
+      // accumulating a soft-tissue blur.
       gradientOpacityScale: 220,
     };
   }
@@ -179,8 +179,8 @@
     return Math.max(minimum, Math.min(maximum, value));
   }
 
-  // `Number(null)` é 0 e passa em isFinite, então opções ausentes precisam ser
-  // descartadas antes da conversão para não virarem uma janela C 0 / W 1.
+  // `Number(null)` is 0 and passes isFinite, so missing options must be
+  // discarded before conversion to avoid becoming a C 0 / W 1 window.
   function finiteOr(value, fallback) {
     if (value === null || value === undefined || value === "") return fallback;
     const numeric = Number(value);
@@ -193,15 +193,15 @@
       || TRANSFER_FUNCTIONS[0];
   }
 
-  // As cores dos presets são autoradas em sRGB de exibição; a composição DVR
-  // acontece em luz linear e só volta a sRGB na escrita final do fragmento.
+  // Preset colors are authored in display sRGB; DVR compositing happens in
+  // linear light and returns to sRGB only in the final fragment write.
   function srgbToLinear(value) {
     const channel = clamp(Number(value), 0, 1);
     return channel <= 0.04045 ? channel / 12.92 : Math.pow((channel + 0.055) / 1.055, 2.4);
   }
 
-  // Reposiciona as paradas do domínio HU canônico sobre a faixa de valores de
-  // uma série sem unidade Hounsfield (RM, por exemplo).
+  // Repositions canonical HU-domain stops over the value range of a non-HU
+  // series (such as MR).
   function transferDomainMapping(domain) {
     if (!domain) return { scale: 1, offset: 0 };
     const [huMinimum, huMaximum] = TRANSFER_HU_DOMAIN;
@@ -237,8 +237,8 @@
     return interpolateTransferValue(last.value, last.value, 0);
   }
 
-  // Domínio nativo do preset — a menor faixa que contém todas as paradas de
-  // cor e opacidade — expresso em unidades do volume via `domain`.
+  // Native preset domain — the smallest range containing all color and opacity
+  // stops — expressed in volume units through `domain`.
   function transferFunctionDomain(id, domain) {
     const preset = getTransferFunction(typeof id === "string" ? id : id && id.id);
     const mapping = transferDomainMapping(domain);
@@ -253,19 +253,19 @@
     return { minimum: lower, maximum: upper, span: Math.max(1, upper - lower) };
   }
 
-  // Janela "nativa" de um preset: cobrir exatamente o domínio dele equivale ao
-  // applyPreset do OHIF, em que as posições absolutas do preset são a janela.
+  // A preset's native window covers its exact domain, equivalent to OHIF
+  // applyPreset where absolute preset positions define the window.
   function transferFunctionWindow(id, domain) {
     const extent = transferFunctionDomain(id, domain);
     return { center: (extent.minimum + extent.maximum) / 2, width: extent.span };
   }
 
-  // Empacota um preset para os uniformes do raycaster, seguindo o modelo da
-  // Isis (volume_compute.metal, #1588): o valor JANELADO é o índice do LUT, e
-  // cor e opacidade saem do preset na posição que a janela escolheu. As duas
-  // rampas são normalizadas 0..1 sobre o domínio nativo compartilhado do
-  // preset; o arrasto W/L varre o preset pelo volume. O `shift` translada só a
-  // opacidade (VolumeShift do OHIF), em unidades do volume. Cores em luz linear.
+  // Packs a preset for raycaster uniforms following the Isis model
+  // (volume_compute.metal, #1588): the WINDOWED value indexes the LUT, and
+  // color and opacity come from the preset position selected by the window.
+  // Both ramps normalize to 0..1 over the shared native domain; W/L drag sweeps
+  // the preset through the volume. `shift` translates only opacity (OHIF
+  // VolumeShift), in volume units. Colors use linear light.
   function packTransferFunction(id, domain, shift) {
     const preset = getTransferFunction(typeof id === "string" ? id : id && id.id);
     const mapping = transferDomainMapping(domain);
@@ -299,8 +299,8 @@
       opacityStops,
       shading: Boolean(preset.shading),
       window: transferFunctionWindow(preset.id, domain),
-      // O limiar de gradiente é medido em valores por voxel, então acompanha o
-      // mesmo fator de escala do domínio.
+      // The gradient threshold is measured in values per voxel, so it follows
+      // the domain's scale factor.
       gradientOpacityScale: Math.max(0, Number(preset.gradientOpacityScale) || 0) * mapping.scale,
     };
     if (PACKED_TRANSFER_CACHE.size >= MAX_PACKED_TRANSFER_CACHE_ENTRIES) {
@@ -313,11 +313,11 @@
   function selectTransferFunction(state, id, domain) {
     const preset = getTransferFunction(id);
     state.transferFunctionId = preset.id;
-    // Como no viewer de referência, trocar de preset restaura o sombreamento que
-    // ele recomenda; o usuário pode desligá-lo em seguida.
+    // As in the reference viewer, selecting a preset restores its recommended
+    // shading; the user can disable it afterward.
     state.shading = Boolean(preset.shading);
-    // E, como o applyPreset do OHIF, o preset traz a própria janela: o W/L do 3D
-    // volta ao domínio nativo dele, de onde o arrasto varre o preset pelo volume.
+    // As with OHIF applyPreset, the preset supplies its own window: 3D W/L
+    // returns to its native domain, from which drag sweeps the preset volume.
     const window = transferFunctionWindow(preset.id, domain);
     state.volumeCenter = window.center;
     state.volumeWidth = window.width;
@@ -327,10 +327,10 @@
   const DEFAULT_WINDOW_MULTIPLIER = 4;
   const DEFAULT_IMAGE_DYNAMIC_RANGE = 1024;
 
-  // Sensibilidade do arrasto W/L, como no WindowLevelTool do cornerstone3D: um
-  // único multiplicador para os dois eixos, fixo por volume — a faixa dinâmica
-  // do corte central (limitada pela faixa declarada da série) dividida por
-  // 1024, arredondada quando maior que 1; inválida ou nula cai no padrão 4.
+  // W/L drag sensitivity, like cornerstone3D's WindowLevelTool: one multiplier
+  // for both axes, fixed per volume — the central slice dynamic range (bounded
+  // by the series' declared range) divided by 1024, rounded above 1; invalid or
+  // empty input falls back to 4.
   function computeWindowLevelMultiplier(voxels, dimensions, valueRange) {
     const plane = dimensions[0] * dimensions[1];
     const start = Math.floor(dimensions[2] / 2) * plane;
@@ -370,7 +370,7 @@
       } else if (drag.tool === "zoom" && state.mprTransforms && state.mprTransforms[drag.plane]) {
         state.mprTransforms[drag.plane].zoom = clamp(drag.zoom * Math.exp(-dy * 0.01), MPR_MIN_ZOOM, MPR_MAX_ZOOM);
       } else if (drag.tool === "scroll" && Array.isArray(state.crosshair)) {
-        // Arrasto vertical percorre os cortes do plano: ~8 px por corte.
+        // Vertical drag traverses plane slices: about 8 px per slice.
         state.crosshair[drag.axis] = clamp(Math.round(drag.slice + dy / 8), 0, drag.axisSize - 1);
       }
       return state;

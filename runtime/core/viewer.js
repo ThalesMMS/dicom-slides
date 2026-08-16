@@ -44,8 +44,8 @@
   const STACK_MAX_ZOOM = 40;
   const STACK_DEFAULT_ZOOM = 1.3;
 
-  // Presets de janela fixos da toolbar; "default" resolve para a janela padrão
-  // da série (defaultWindow do manifesto). Atalhos: teclas 1 a 5.
+  // Fixed window presets in the toolbar; "default" resolves to the series'
+  // default window (defaultWindow in the manifest). Shortcuts: keys 1 through 5.
   const WINDOW_PRESETS = Object.freeze([
     { id: "default", label: "Default", center: null, width: null },
     { id: "abdomen", label: "Abdomen", center: 60, width: 400 },
@@ -98,7 +98,7 @@
       this.drag = null;
       this.destroyed = false;
       this.wheelAccumulator = 0;
-      this.volumeCapability = { supported: false, reason: "Módulo volumétrico ainda não inicializado" };
+      this.volumeCapability = { supported: false, reason: "Volumetric module has not been initialized yet" };
       this.volumeData = null;
       this.volumeView = null;
       this.volumeLoadPromise = null;
@@ -616,7 +616,7 @@
         this.state.zoom = clamp(this.drag.zoom * Math.exp(-dy * 0.01), STACK_MIN_ZOOM, STACK_MAX_ZOOM);
         this.scheduleRender(false);
       } else if (this.drag.tool === "scroll") {
-        // Arrasto vertical navega os cortes: ~12 px por corte.
+        // Vertical drag navigates slices: about 12 px per slice.
         const target = this.drag.slice + Math.round(dy / 12);
         if (target !== this.state.slice) this.setSlice(target).catch(() => {});
       }
@@ -649,8 +649,8 @@
       this.setSlice(this.state.slice + step).catch((error) => this._showError(error));
     }
 
-    // Seleciona a ferramenta ativa no modo atual: 2D usa o toolbar da pilha,
-    // MPR e 3D encaminham para o VolumeViewer.
+    // Selects the active tool for the current mode: 2D uses the stack toolbar,
+    // while MPR and 3D forward the selection to VolumeViewer.
     _setToolShortcut(tool) {
       if (this.state.mode === "stack") this.setActiveTool(tool);
       else if (this.volumeView) this.volumeView.setTool(tool);
