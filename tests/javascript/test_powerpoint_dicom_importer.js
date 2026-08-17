@@ -283,7 +283,7 @@ async function main() {
   assert.equal(result.study.seriesCount, 1);
   assert.equal(result.study.source.dicomFileCount, 2);
   assert.equal(result.study.source.phiTagsRemoved, true);
-  assert(result.warnings.some((warning) => warning.includes("identificadores")));
+  assert(result.warnings.some((warning) => warning.includes("Identifying metadata")));
   assert(progress.some((item) => item.phase === "complete"));
   for (let index = 1; index < progress.length; index += 1) {
     assert(progress[index].progress >= progress[index - 1].progress, "progress must be monotonic");
@@ -351,11 +351,11 @@ async function main() {
       fileLike("study-a.dcm", first),
       fileLike("study-b.dcm", makeDicom({ studyUid: "9.9.9", seriesUid: "9.9.9.1" })),
     ], { persist: false }),
-    /múltiplos Study Instance UIDs/
+    /multiple Study Instance UIDs/
   );
 
   const compressedMeta = Object.assign({}, parsed, { transferSyntaxUID: "1.2.840.10008.1.2.4.90" });
-  assert.match(importer.testing.supportedRecordReason(compressedMeta), /comprimida/);
+  assert.match(importer.testing.supportedRecordReason(compressedMeta), /compressed/);
 
   console.log("PowerPoint browser DICOM importer tests passed.");
 }

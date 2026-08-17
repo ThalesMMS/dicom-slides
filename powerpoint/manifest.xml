@@ -4,11 +4,11 @@
   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
   xsi:type="ContentApp">
   <Id>3c8d5463-e606-4e35-86de-515114b31089</Id>
-  <Version>1.1.0.0</Version>
+  <Version>1.2.0.0</Version>
   <ProviderName>ThalesMMS</ProviderName>
-  <DefaultLocale>pt-BR</DefaultLocale>
+  <DefaultLocale>en-US</DefaultLocale>
   <DisplayName DefaultValue="DICOM Slides" />
-  <Description DefaultValue="Importe DICOM e visualize stack 2D, MPR e renderização 3D dentro de slides do PowerPoint." />
+  <Description DefaultValue="Import DICOM and view interactive 2D stacks, MPR, and 3D volume rendering in PowerPoint slides." />
   <IconUrl DefaultValue="https://thalesmms.github.io/dicom-slides/powerpoint/assets/icon-32.png" />
   <HighResolutionIconUrl DefaultValue="https://thalesmms.github.io/dicom-slides/powerpoint/assets/icon-80.png" />
   <SupportUrl DefaultValue="https://github.com/ThalesMMS/dicom-slides/tree/main/powerpoint" />

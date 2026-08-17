@@ -11,6 +11,10 @@ The add-in now has two study-input paths:
    the PowerPoint webview at import time; or
 2. open a preconverted `dicom-slide-study/1` package hosted over HTTPS.
 
+A newly inserted add-in opens with no study selected. The import panel is shown
+immediately; bundled demonstration studies remain available as optional catalog
+choices and are never loaded as a fallback.
+
 > **Demonstration, education, and research use only. Not intended for diagnosis
 > or clinical decision-making.**
 
@@ -111,6 +115,14 @@ the add-in origin. Consequently:
 - if IndexedDB is unavailable or its quota is exceeded, the imported exam
   remains usable for the current session but is not restorable later.
 
+Inside PowerPoint, `Office.context.document.settings` is the only authority for
+the study assigned to the slide. The add-in waits for Office initialization
+before restoring that state, and it awaits `settings.saveAsync` after a local
+import. Origin-wide `localStorage` is used only by the standalone browser
+preview, never as a PowerPoint fallback. If the slide references a local study
+whose IndexedDB package is missing, the add-in asks for a new import instead of
+silently displaying a demonstration study.
+
 `AllowSnapshot` remains enabled in the manifest so compatible PowerPoint
 clients can preserve a static visual fallback. The snapshot is not a
 replacement for the interactive pixel package.
@@ -170,7 +182,7 @@ on the web is the simplest cross-platform development check.
 
 ## Preconverted and remote studies
 
-The built-in catalog contains:
+The optional built-in catalog contains:
 
 - MRI-DIR synthetic T1 MR: four series;
 - Visible Human abdominal CT: normal and post-freezing series.

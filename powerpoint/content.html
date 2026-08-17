@@ -1,10 +1,10 @@
 <!doctype html>
-<html lang="pt-BR">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="color-scheme" content="dark">
-  <title>DICOM Slides para PowerPoint</title>
+  <title>DICOM Slides for PowerPoint</title>
   <link rel="stylesheet" href="content.css">
   <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
 </head>
@@ -12,108 +12,114 @@
   <main class="app-shell" aria-label="DICOM Slides">
     <header class="topbar authoring-bar" id="authoringBar">
       <button class="icon-button authoring-only" id="settingsButton" type="button"
-              aria-label="Configurar visualizador" aria-controls="settingsPanel" aria-expanded="false">⚙</button>
+              aria-label="Configure viewer" aria-controls="settingsPanel" aria-expanded="false">⚙</button>
       <div class="brand-block">
         <strong>DICOM Slides</strong>
-        <span id="studyLabel">Carregando estudo…</span>
+        <span id="studyLabel">No study loaded</span>
       </div>
       <div class="state-badges" aria-live="polite">
         <span class="badge" id="modeBadge">2D</span>
-        <span class="badge" id="seriesBadge">Série —</span>
-        <span class="badge" id="sliceBadge">Imagem —</span>
+        <span class="badge" id="seriesBadge">Series —</span>
+        <span class="badge" id="sliceBadge">Image —</span>
       </div>
     </header>
 
-    <section class="viewer-region" aria-label="Visualizador de imagens médicas">
+    <section class="viewer-region" aria-label="Medical image viewer">
       <div id="viewerMount" class="viewer-mount"></div>
+      <section class="empty-state" id="emptyState" aria-labelledby="emptyStateTitle">
+        <div class="empty-state-mark" aria-hidden="true">DICOM</div>
+        <strong id="emptyStateTitle">No study loaded</strong>
+        <span id="emptyStateMessage">Import DICOM files, a folder, or a ZIP archive to begin.</span>
+        <button class="primary-button authoring-only" id="emptyImportButton" type="button">Import DICOM</button>
+      </section>
       <div id="loadingPanel" class="loading-panel" role="status" aria-live="polite">
         <span class="spinner" aria-hidden="true"></span>
-        <span id="loadingText">Inicializando visualizador…</span>
+        <span id="loadingText">Initializing viewer…</span>
       </div>
 
       <aside class="settings-panel authoring-only" id="settingsPanel" hidden
-             aria-label="Configuração do visualizador">
+             aria-label="Viewer settings">
         <div class="settings-heading">
           <div>
-            <strong>Conteúdo do slide</strong>
-            <span>Importe DICOM diretamente ou escolha um pacote já convertido.</span>
+            <strong>Slide content</strong>
+            <span>Import DICOM directly or choose an existing converted package.</span>
           </div>
-          <button class="icon-button" id="closeSettingsButton" type="button" aria-label="Fechar configuração">×</button>
+          <button class="icon-button" id="closeSettingsButton" type="button" aria-label="Close settings">×</button>
         </div>
 
         <section class="import-card" aria-labelledby="importHeading">
           <div class="import-heading-row">
             <div>
-              <strong id="importHeading">Importar exame DICOM</strong>
-              <span>A conversão ocorre localmente neste PowerPoint/WebView.</span>
+              <strong id="importHeading">Import DICOM study</strong>
+              <span>Conversion runs locally in this PowerPoint WebView.</span>
             </div>
             <span class="local-pill">Local</span>
           </div>
           <div class="import-actions">
-            <button class="secondary-button" id="importFilesButton" type="button">Arquivos</button>
-            <button class="secondary-button" id="importFolderButton" type="button">Pasta</button>
+            <button class="secondary-button" id="importFilesButton" type="button">Files</button>
+            <button class="secondary-button" id="importFolderButton" type="button">Folder</button>
             <button class="secondary-button" id="importZipButton" type="button">ZIP</button>
           </div>
           <input id="importFilesInput" type="file" multiple hidden>
           <input id="importFolderInput" type="file" multiple webkitdirectory directory hidden>
           <input id="importZipInput" type="file" accept=".zip,application/zip,application/x-zip-compressed" hidden>
           <div class="import-drop-zone" id="importDropZone" tabindex="0" role="button"
-               aria-label="Arraste arquivos DICOM ou um ZIP para importar">
-            Arraste arquivos DICOM ou um ZIP para esta área
+               aria-label="Drop DICOM files or a ZIP archive to import">
+            Drop DICOM files or a ZIP archive here
           </div>
           <div class="import-progress" id="importProgress" hidden>
             <progress id="importProgressBar" max="1" value="0"></progress>
             <div>
-              <span id="importProgressText">Preparando importação…</span>
-              <button class="text-button" id="cancelImportButton" type="button">Cancelar</button>
+              <span id="importProgressText">Preparing import…</span>
+              <button class="text-button" id="cancelImportButton" type="button">Cancel</button>
             </div>
           </div>
-          <p class="import-note">Suporta séries single-frame não comprimidas: Implicit/Explicit VR Little Endian, Explicit VR Big Endian, mono 8/16-bit e RGB 8-bit.</p>
+          <p class="import-note">Supports uncompressed single-frame series: Implicit/Explicit VR Little Endian, Explicit VR Big Endian, 8/16-bit monochrome, and 8-bit RGB.</p>
         </section>
 
-        <div class="section-divider"><span>ou use um pacote existente</span></div>
+        <div class="section-divider"><span>or use an existing package</span></div>
 
         <form id="settingsForm" novalidate>
           <label class="field full-width">
-            <span>Estudo</span>
+            <span>Study</span>
             <select id="catalogId" name="catalogId"></select>
           </label>
 
           <div class="local-source" id="localSource" hidden>
             <div>
-              <strong>Exame importado neste dispositivo</strong>
-              <span id="localSourceSummary">O pacote convertido está no cache local.</span>
+              <strong>Study imported on this device</strong>
+              <span id="localSourceSummary">The converted package is in the local cache.</span>
             </div>
             <div class="local-source-actions">
-              <button class="text-button" id="useRemoteSourceButton" type="button">Usar URL HTTPS</button>
-              <button class="text-button danger-text" id="removeLocalSourceButton" type="button">Remover cache</button>
+              <button class="text-button" id="useRemoteSourceButton" type="button">Use HTTPS URL</button>
+              <button class="text-button danger-text" id="removeLocalSourceButton" type="button">Remove cached study</button>
             </div>
           </div>
 
           <div class="custom-source" id="customSource" hidden>
             <label class="field full-width">
-              <span>ID do estudo</span>
+              <span>Study ID</span>
               <input id="studyId" name="studyId" type="text" autocomplete="off"
-                     placeholder="meu-estudo-anonimizado">
+                     placeholder="my-anonymized-study">
             </label>
             <label class="field full-width">
-              <span>URL HTTPS do <code>study.js</code></span>
+              <span>HTTPS URL for <code>study.js</code></span>
               <input id="studyUrl" name="studyUrl" type="url" inputmode="url" autocomplete="off"
-                     placeholder="https://exemplo.org/casos/meu-estudo/study.js">
+                     placeholder="https://example.org/cases/my-study/study.js">
             </label>
           </div>
 
           <div class="field-grid">
             <label class="field">
-              <span>Série</span>
+              <span>Series</span>
               <input id="series" name="series" type="text" autocomplete="off" placeholder="1">
             </label>
             <label class="field">
-              <span>Imagem inicial</span>
+              <span>Initial image</span>
               <input id="slice" name="slice" type="number" min="0" step="1" inputmode="numeric">
             </label>
             <label class="field">
-              <span>Modo</span>
+              <span>Mode</span>
               <select id="mode" name="mode">
                 <option value="stack">2D</option>
                 <option value="mpr">MPR</option>
@@ -121,17 +127,17 @@
               </select>
             </label>
             <label class="field">
-              <span>Janela</span>
+              <span>Window preset</span>
               <select id="preset" name="preset">
-                <option value="default">Padrão</option>
-                <option value="abdomen">Abdome</option>
-                <option value="lung">Pulmão</option>
-                <option value="bone">Osso</option>
-                <option value="brain">Encéfalo</option>
+                <option value="default">Default</option>
+                <option value="abdomen">Abdomen</option>
+                <option value="lung">Lung</option>
+                <option value="bone">Bone</option>
+                <option value="brain">Brain</option>
               </select>
             </label>
             <label class="field full-width">
-              <span>Ferramenta 2D</span>
+              <span>2D tool</span>
               <select id="tool" name="tool">
                 <option value="window">Window/Level</option>
                 <option value="pan">Pan</option>
@@ -142,25 +148,25 @@
           </div>
 
           <p class="security-note">
-            O importador não grava Patient Name, Patient ID, accession number nem instituição no pacote local,
-            mas não remove texto queimado nos pixels e não certifica anonimização. Revise o exame antes de compartilhar.
+            The importer does not store Patient Name, Patient ID, accession number, or institution in the local package.
+            It does not remove text burned into pixels or certify anonymization. Review the study before sharing it.
           </p>
 
           <div class="form-actions">
-            <button class="secondary-button" id="restoreButton" type="button">Restaurar padrão</button>
-            <button class="primary-button" type="submit">Aplicar ao slide</button>
+            <button class="secondary-button" id="restoreButton" type="button">Reset view</button>
+            <button class="primary-button" type="submit">Apply to slide</button>
           </div>
         </form>
       </aside>
     </section>
 
     <footer class="brandbar">
-      <span id="statusText" role="status" aria-live="polite">Demonstração, ensino e pesquisa.</span>
-      <span>Não destinado a diagnóstico ou decisão clínica.</span>
+      <span id="statusText" role="status" aria-live="polite">Ready to import a DICOM study.</span>
+      <span>Not intended for diagnosis or clinical decision-making.</span>
     </footer>
   </main>
 
-  <noscript>Este suplemento requer JavaScript.</noscript>
+  <noscript>This add-in requires JavaScript.</noscript>
   <script src="../runtime/dicom-slide.js"></script>
   <script src="studies.js"></script>
   <script src="dicom-importer.js"></script>

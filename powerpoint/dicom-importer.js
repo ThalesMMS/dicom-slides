@@ -101,7 +101,7 @@
   const databaseReady = openDatabase().catch(() => null);
 
   function abortIfRequested(signal) {
-    if (signal?.aborted) throw new DOMException("Importação cancelada.", "AbortError");
+    if (signal?.aborted) throw new DOMException("Import canceled.", "AbortError");
   }
 
   function report(callback, phase, progress, message, detail = {}) {
@@ -358,16 +358,16 @@
 
   function supportedRecordReason(meta) {
     const transferSyntax = safeText(meta, "transferSyntaxUID") || EXPLICIT_VR_LITTLE_ENDIAN;
-    if (!UNCOMPRESSED_TRANSFER_SYNTAXES.has(transferSyntax)) return `transfer syntax comprimida ou não suportada (${transferSyntax})`;
-    if (meta.pixelOffset == null || meta.pixelLength == null || meta.pixelLength === 0xffffffff) return "Pixel Data encapsulado ou ausente";
-    if (firstNumber(meta.numberOfFrames, 1) !== 1) return "somente imagens single-frame são suportadas";
+    if (!UNCOMPRESSED_TRANSFER_SYNTAXES.has(transferSyntax)) return `compressed or unsupported transfer syntax (${transferSyntax})`;
+    if (meta.pixelOffset == null || meta.pixelLength == null || meta.pixelLength === 0xffffffff) return "encapsulated or missing Pixel Data";
+    if (firstNumber(meta.numberOfFrames, 1) !== 1) return "only single-frame images are supported";
     const samples = Number(meta.samplesPerPixel || 1);
     const bits = Number(meta.bitsAllocated);
-    if (samples === 1 && ![8, 16].includes(bits)) return `Bits Allocated ${bits}; esperado 8 ou 16`;
-    if (samples === 3 && bits !== 8) return "RGB deve usar três amostras de 8 bits";
-    if (![1, 3].includes(samples)) return `Samples per Pixel ${samples}; esperado 1 ou 3`;
+    if (samples === 1 && ![8, 16].includes(bits)) return `Bits Allocated ${bits}; expected 8 or 16`;
+    if (samples === 3 && bits !== 8) return "RGB must use three 8-bit samples";
+    if (![1, 3].includes(samples)) return `Samples per Pixel ${samples}; expected 1 or 3`;
     if (samples === 3 && safeText(meta, "photometricInterpretation").toUpperCase() !== "RGB") {
-      return `espaço de cor ${safeText(meta, "photometricInterpretation") || "desconhecido"}; esperado RGB`;
+      return `color space ${safeText(meta, "photometricInterpretation") || "unknown"}; expected RGB`;
     }
     return null;
   }
@@ -384,7 +384,7 @@
     const expectedBytes = expectedPixels * (bits / 8);
     const start = Number(record.pixelOffset);
     if (start < 0 || start + expectedBytes > bytes.length || Number(record.pixelLength) < expectedBytes) {
-      throw new Error("Pixel Data truncado em uma imagem da série.");
+      throw new Error("Truncated Pixel Data in a series image.");
     }
 
     const transferSyntax = safeText(record, "transferSyntaxUID") || EXPLICIT_VR_LITTLE_ENDIAN;
@@ -414,7 +414,7 @@
     const expectedBytes = expectedPixels * 3;
     const start = Number(record.pixelOffset);
     if (start < 0 || start + expectedBytes > bytes.length || Number(record.pixelLength) < expectedBytes) {
-      throw new Error("Pixel Data RGB truncado em uma imagem da série.");
+      throw new Error("Truncated RGB Pixel Data in a series image.");
     }
     const payload = bytes.slice(start, start + expectedBytes);
     if (Number(record.planarConfiguration || 0) === 0) return payload;
@@ -438,7 +438,7 @@
 
   async function gzipBytes(bytes) {
     if (!("CompressionStream" in global)) {
-      throw new Error("Este PowerPoint/WebView não fornece CompressionStream('gzip'). Use uma versão atual ou o conversor Python offline.");
+      throw new Error("This PowerPoint WebView does not provide CompressionStream('gzip'). Use a current version or the offline Python converter.");
     }
     const stream = new Blob([bytes]).stream().pipeThrough(new global.CompressionStream("gzip"));
     return new Uint8Array(await new Response(stream).arrayBuffer());
@@ -446,13 +446,13 @@
 
   async function inflateRaw(bytes) {
     if (!("DecompressionStream" in global)) {
-      throw new Error("Este PowerPoint/WebView não consegue descompactar ZIP. Selecione a pasta DICOM ou atualize o aplicativo.");
+      throw new Error("This PowerPoint WebView cannot decompress ZIP archives. Select the DICOM folder or update PowerPoint.");
     }
     let stream;
     try {
       stream = new Blob([bytes]).stream().pipeThrough(new global.DecompressionStream("deflate-raw"));
     } catch (error) {
-      throw new Error(`Não foi possível iniciar a descompressão ZIP: ${error.message}`);
+      throw new Error(`Could not start ZIP decompression: ${error.message}`);
     }
     return new Uint8Array(await new Response(stream).arrayBuffer());
   }
@@ -499,7 +499,7 @@
     const bytesPerSlice = rows * columns * (isRgb ? 3 : 2);
     const totalPixelBytes = bytesPerSlice * records.length;
     if (totalPixelBytes > MAX_PIXEL_BYTES) {
-      throw new Error(`A série excede o limite de ${Math.round(MAX_PIXEL_BYTES / 1024 / 1024)} MiB de pixels descompactados.`);
+      throw new Error(`The series exceeds the ${Math.round(MAX_PIXEL_BYTES / 1024 / 1024)} MiB uncompressed pixel limit.`);
     }
 
     const orientation = splitNumbers(first.imageOrientationPatient);
@@ -521,8 +521,8 @@
     for (let index = 0; index < records.length; index += 1) {
       abortIfRequested(signal);
       const record = records[index];
-      if (Number(record.rows) !== rows || Number(record.columns) !== columns) throw new Error("As dimensões da série são inconsistentes.");
-      if (Number(record.samplesPerPixel || 1) !== samplesPerPixel) throw new Error("Samples per Pixel inconsistente na série.");
+      if (Number(record.rows) !== rows || Number(record.columns) !== columns) throw new Error("The series dimensions are inconsistent.");
+      if (Number(record.samplesPerPixel || 1) !== samplesPerPixel) throw new Error("Samples per Pixel is inconsistent within the series.");
       const pixels = isRgb ? await readRgbPixels(record) : await readMonochromePixels(record);
       const bytes = isRgb ? pixels : int16LittleEndianBytes(pixels);
       for (const value of pixels) {
@@ -536,7 +536,7 @@
         onProgress,
         "convert",
         0.25 + 0.68 * ((seriesPosition + (index + 1) / records.length) / seriesTotal),
-        `Convertendo série ${seriesPosition + 1}/${seriesTotal}: imagem ${index + 1}/${records.length}`,
+        `Converting series ${seriesPosition + 1}/${seriesTotal}: image ${index + 1}/${records.length}`,
         { seriesIndex: seriesPosition, seriesTotal, imageIndex: index, imageTotal: records.length }
       );
       if (index % 2 === 1) await yieldToUi();
@@ -641,17 +641,17 @@
     const archive = new Uint8Array(await file.arrayBuffer());
     const view = new DataView(archive.buffer, archive.byteOffset, archive.byteLength);
     const eocd = findEndOfCentralDirectory(archive);
-    if (eocd < 0) throw new Error(`${file.name}: diretório central ZIP não encontrado.`);
+    if (eocd < 0) throw new Error(`${file.name}: ZIP central directory not found.`);
     const entryCount = view.getUint16(eocd + 10, true);
     const centralOffset = view.getUint32(eocd + 16, true);
-    if (entryCount === 0xffff || centralOffset === 0xffffffff) throw new Error("ZIP64 ainda não é suportado no importador do PowerPoint.");
+    if (entryCount === 0xffff || centralOffset === 0xffffffff) throw new Error("ZIP64 is not supported by the PowerPoint importer yet.");
 
     const entries = [];
     let offset = centralOffset;
     let expandedBytes = 0;
     for (let index = 0; index < entryCount; index += 1) {
       abortIfRequested(signal);
-      if (offset + 46 > archive.length || view.getUint32(offset, true) !== 0x02014b50) throw new Error(`${file.name}: diretório central ZIP inválido.`);
+      if (offset + 46 > archive.length || view.getUint32(offset, true) !== 0x02014b50) throw new Error(`${file.name}: invalid ZIP central directory.`);
       const flags = view.getUint16(offset + 8, true);
       const method = view.getUint16(offset + 10, true);
       const compressedSize = view.getUint32(offset + 20, true);
@@ -665,15 +665,15 @@
       offset += 46 + nameLength + extraLength + commentLength;
 
       if (!name || name.endsWith("/") || name.startsWith("__MACOSX/") || /(^|\/)\.DS_Store$/.test(name) || /(^|\/)\._/.test(name)) continue;
-      if (flags & 0x0001) throw new Error(`${name}: ZIP criptografado não é suportado.`);
-      if (![0, 8].includes(method)) throw new Error(`${name}: método ZIP ${method} não é suportado.`);
-      if (localOffset + 30 > archive.length || view.getUint32(localOffset, true) !== 0x04034b50) throw new Error(`${name}: cabeçalho ZIP local inválido.`);
+      if (flags & 0x0001) throw new Error(`${name}: encrypted ZIP entries are not supported.`);
+      if (![0, 8].includes(method)) throw new Error(`${name}: ZIP method ${method} is not supported.`);
+      if (localOffset + 30 > archive.length || view.getUint32(localOffset, true) !== 0x04034b50) throw new Error(`${name}: invalid local ZIP header.`);
       const localNameLength = view.getUint16(localOffset + 26, true);
       const localExtraLength = view.getUint16(localOffset + 28, true);
       const dataOffset = localOffset + 30 + localNameLength + localExtraLength;
-      if (dataOffset + compressedSize > archive.length) throw new Error(`${name}: conteúdo ZIP truncado.`);
+      if (dataOffset + compressedSize > archive.length) throw new Error(`${name}: truncated ZIP content.`);
       expandedBytes += uncompressedSize;
-      if (expandedBytes > MAX_EXPANDED_BYTES) throw new Error(`O ZIP excede ${Math.round(MAX_EXPANDED_BYTES / 1024 / 1024)} MiB após descompactação.`);
+      if (expandedBytes > MAX_EXPANDED_BYTES) throw new Error(`The ZIP archive exceeds ${Math.round(MAX_EXPANDED_BYTES / 1024 / 1024)} MiB after decompression.`);
 
       entries.push({
         name,
@@ -682,11 +682,11 @@
           abortIfRequested(signal);
           const compressed = archive.slice(dataOffset, dataOffset + compressedSize);
           const output = method === 0 ? compressed : await inflateRaw(compressed);
-          if (output.byteLength !== uncompressedSize) throw new Error(`${name}: tamanho descompactado divergente.`);
+          if (output.byteLength !== uncompressedSize) throw new Error(`${name}: decompressed size does not match the ZIP entry.`);
           return output;
         },
       });
-      report(onProgress, "unzip", (index + 1) / entryCount * 0.08, `Indexando ZIP: ${index + 1}/${entryCount}`);
+      report(onProgress, "unzip", (index + 1) / entryCount * 0.08, `Indexing ZIP: ${index + 1}/${entryCount}`);
     }
     return entries;
   }
@@ -698,11 +698,11 @@
       const isZip = /\.zip$/i.test(file.name || "") || file.type === "application/zip" || file.type === "application/x-zip-compressed";
       if (isZip) sources.push(...await zipSourcesFromFile(file, options));
       else sources.push(sourceFromFile(file));
-      if (sources.length > MAX_INPUT_FILES) throw new Error(`A importação excede o limite de ${MAX_INPUT_FILES} arquivos.`);
+      if (sources.length > MAX_INPUT_FILES) throw new Error(`The import exceeds the limit of ${MAX_INPUT_FILES} files.`);
     }
-    if (!sources.length) throw new Error("Nenhum arquivo foi selecionado.");
+    if (!sources.length) throw new Error("No files were selected.");
     const total = sources.reduce((sum, source) => sum + Number(source.size || 0), 0);
-    if (total > MAX_EXPANDED_BYTES) throw new Error(`A seleção excede ${Math.round(MAX_EXPANDED_BYTES / 1024 / 1024)} MiB.`);
+    if (total > MAX_EXPANDED_BYTES) throw new Error(`The selection exceeds ${Math.round(MAX_EXPANDED_BYTES / 1024 / 1024)} MiB.`);
     return sources;
   }
 
@@ -723,7 +723,7 @@
     const onProgress = options.onProgress;
     const chunkSize = Math.max(1, Math.round(Number(options.chunkSize || DEFAULT_CHUNK_SIZE)));
     abortIfRequested(signal);
-    report(onProgress, "prepare", 0, "Preparando arquivos para importação…");
+    report(onProgress, "prepare", 0, "Preparing files for import…");
 
     const sources = await expandInputFiles(files, { signal, onProgress });
     const headers = [];
@@ -739,11 +739,11 @@
       } catch (error) {
         scanErrors.push(`${source.name}: ${error.message}`);
       }
-      report(onProgress, "scan", 0.08 + (index + 1) / sources.length * 0.17, `Lendo cabeçalhos DICOM: ${index + 1}/${sources.length}`);
+      report(onProgress, "scan", 0.08 + (index + 1) / sources.length * 0.17, `Reading DICOM headers: ${index + 1}/${sources.length}`);
       if (index % 8 === 7) await yieldToUi();
     }
     if (!headers.length) {
-      throw new Error(`Nenhuma imagem DICOM compatível foi encontrada.${scanErrors.length ? `\n${scanErrors.slice(0, 5).join("\n")}` : ""}`);
+      throw new Error(`No compatible DICOM images were found.${scanErrors.length ? `\n${scanErrors.slice(0, 5).join("\n")}` : ""}`);
     }
 
     const studyCounts = new Map();
@@ -753,7 +753,7 @@
     });
     if (studyCounts.size !== 1) {
       const counts = Array.from(studyCounts.entries()).map(([uid, count]) => `${uid}: ${count}`).join(", ");
-      throw new Error(`A seleção contém múltiplos Study Instance UIDs (${counts}). Importe um exame por vez.`);
+      throw new Error(`The selection contains multiple Study Instance UIDs (${counts}). Import one study at a time.`);
     }
 
     const grouped = new Map();
@@ -772,12 +772,12 @@
     const studyTitle = safeText(firstHeader, "studyDescription") || "Imported DICOM study";
     const studyId = `local-${slugify(studyTitle, "dicom-study")}-${studyHash}`;
     const warnings = [];
-    if (scanErrors.length) warnings.push(`${scanErrors.length} arquivo(s) não DICOM ou incompleto(s) foram ignorados.`);
+    if (scanErrors.length) warnings.push(`${scanErrors.length} non-DICOM or incomplete file(s) were ignored.`);
 
     const phiTagsDetected = headers.some((record) => ["patientName", "patientID", "accessionNumber", "institutionName"].some((key) => Boolean(safeText(record, key))));
     const burnedInAnnotation = headers.some((record) => safeText(record, "burnedInAnnotation").toUpperCase() === "YES");
-    if (phiTagsDetected) warnings.push("Metadados identificadores foram detectados e não foram gravados no pacote convertido.");
-    if (burnedInAnnotation) warnings.push("Burned In Annotation = YES em pelo menos uma imagem; revise os pixels antes de compartilhar.");
+    if (phiTagsDetected) warnings.push("Identifying metadata was detected and was not stored in the converted package.");
+    if (burnedInAnnotation) warnings.push("Burned In Annotation = YES in at least one image; review the pixels before sharing.");
 
     const seriesEntries = [];
     const manifests = {};
@@ -792,7 +792,7 @@
       const reasons = Array.from(new Set(records.map(supportedRecordReason).filter(Boolean)));
       if (reasons.length) {
         const description = safeText(records[0], "seriesDescription") || safeText(records[0], "seriesNumber") || String(position + 1);
-        warnings.push(`Série ${description} ignorada: ${reasons.join("; ")}.`);
+        warnings.push(`Series ${description} skipped: ${reasons.join("; ")}.`);
         continue;
       }
       const first = records[0];
@@ -829,12 +829,12 @@
           manifest: `series/${seriesId}/manifest.js`,
         });
       } catch (error) {
-        warnings.push(`Série ${description} ignorada: ${error.message}`);
+        warnings.push(`Series ${description} skipped: ${error.message}`);
       }
     }
 
     if (!seriesEntries.length) {
-      throw new Error(`Nenhuma série pôde ser convertida. ${warnings.join(" ")}`);
+      throw new Error(`No series could be converted. ${warnings.join(" ")}`);
     }
 
     const study = {
@@ -867,10 +867,10 @@
       totalPixelBytes,
     };
 
-    report(onProgress, "persist", 0.96, "Gravando o exame convertido no cache local…");
+    report(onProgress, "persist", 0.96, "Writing the converted study to the local cache…");
     const persisted = options.persist === false ? false : await storePackage(packageRecord);
     await registerPackage(packageRecord);
-    report(onProgress, "complete", 1, `Importação concluída: ${seriesEntries.length} série(s), ${headers.length} imagem(ns).`);
+    report(onProgress, "complete", 1, `Import complete: ${seriesEntries.length} series, ${headers.length} images.`);
     return { package: packageRecord, study, warnings, persisted, totalCompressedBytes, totalPixelBytes };
   }
 
@@ -896,10 +896,10 @@
   }
 
   async function registerPackage(packageRecord) {
-    if (!packageRecord?.study?.studyId) throw new Error("Pacote local inválido.");
+    if (!packageRecord?.study?.studyId) throw new Error("Invalid local package.");
     if (global.DicomSlide?.ready) await global.DicomSlide.ready;
     const dataApi = global.DicomSlideData;
-    if (!dataApi?.registerManifest || !dataApi?.registerChunk) throw new Error("O runtime DICOM Slides ainda não está disponível.");
+    if (!dataApi?.registerManifest || !dataApi?.registerChunk) throw new Error("The DICOM Slides runtime is not available yet.");
 
     const study = Object.assign({}, packageRecord.study, { baseUrl: `${LOCAL_PROTOCOL}//${packageRecord.study.studyId}/` });
     const registry = global.__DICOM_SLIDE_STUDIES__ || (global.__DICOM_SLIDE_STUDIES__ = {});
@@ -919,7 +919,7 @@
     if (global.__DICOM_SLIDE_STUDIES__?.[studyId]) return global.__DICOM_SLIDE_STUDIES__[studyId];
     const packageRecord = await loadPackage(studyId);
     if (!packageRecord) {
-      throw new Error("Este exame foi importado localmente, mas não existe no cache deste dispositivo/perfil. Importe os DICOM novamente.");
+      throw new Error("This study was imported locally, but it is not in this device and profile's cache. Import the DICOM files again.");
     }
     return registerPackage(packageRecord);
   }
@@ -933,8 +933,8 @@
         if (!database.objectStoreNames.contains(PACKAGE_STORE)) database.createObjectStore(PACKAGE_STORE, { keyPath: "id" });
       };
       request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error || new Error("Não foi possível abrir IndexedDB."));
-      request.onblocked = () => reject(new Error("O cache local está bloqueado por outra janela."));
+      request.onerror = () => reject(request.error || new Error("Could not open IndexedDB."));
+      request.onblocked = () => reject(new Error("The local cache is blocked by another window."));
     });
   }
 
@@ -950,8 +950,8 @@
         return;
       }
       transaction.oncomplete = () => resolve(request?.result);
-      transaction.onerror = () => reject(transaction.error || request?.error || new Error("Falha no cache local."));
-      transaction.onabort = () => reject(transaction.error || new Error("Operação de cache cancelada."));
+      transaction.onerror = () => reject(transaction.error || request?.error || new Error("Local cache failure."));
+      transaction.onabort = () => reject(transaction.error || new Error("Cache operation canceled."));
     });
   }
 
