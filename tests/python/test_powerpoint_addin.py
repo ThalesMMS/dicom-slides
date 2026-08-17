@@ -33,6 +33,30 @@ class PowerPointAddinTests(unittest.TestCase):
     def test_html_and_scripts(self) -> None:
         VALIDATOR.validate_html_and_scripts()
 
+    def test_powerpoint_uses_one_compact_viewer_toolbar(self) -> None:
+        html = (ROOT / "powerpoint" / "content.html").read_text(encoding="utf-8")
+        self.assertEqual(html.count('class="viewer-toolbar"'), 1)
+        self.assertIn('<script src="powerpoint-host.js"></script>', html)
+        for control_id in (
+            "importButton",
+            "toolWindowButton",
+            "toolPanButton",
+            "toolZoomButton",
+            "toolScrollButton",
+            "windowPresetSelect",
+            "seriesSelect",
+            "mode2dButton",
+            "modeMprButton",
+            "mode3dButton",
+            "resetViewButton",
+            "expandViewButton",
+        ):
+            self.assertIn(f'id="{control_id}"', html)
+        for removed_id in ("studyLabel", "modeBadge", "seriesBadge", "sliceBadge"):
+            self.assertNotIn(f'id="{removed_id}"', html)
+        self.assertNotIn('class="brand-block"', html)
+        self.assertNotIn('class="state-badges"', html)
+
     def test_browser_dicom_importer_contract(self) -> None:
         VALIDATOR.validate_importer()
 

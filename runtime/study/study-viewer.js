@@ -11,6 +11,8 @@
 .dss-button{box-sizing:border-box;inline-size:34px;min-inline-size:34px;max-inline-size:34px;padding:0;display:inline-grid;place-items:center;justify-self:center;cursor:pointer;font-weight:800}.dss-button:hover:not(:disabled){border-color:#38bdf8;background:#20303c}.dss-button:disabled{opacity:.4;cursor:default}
 .dss-count{min-width:56px;color:#9eb0bd;text-align:right;font-variant-numeric:tabular-nums}
 .dss-viewer{min-height:0;overflow:hidden;background:#000}
+.dss-root[data-controls="external"]{grid-template-rows:minmax(0,1fr)}
+.dss-root[data-controls="external"] .dss-seriesbar{display:none}
 .dss-error{display:grid;place-items:center;height:100%;padding:24px;background:#14080a;color:#ffd5dc;text-align:center;white-space:pre-wrap}
 @media(max-width:720px){.dss-seriesbar{grid-template-columns:auto minmax(0,1fr) auto auto}.dss-study{display:none}.dss-label{display:none}.dss-count{min-width:42px}}
 `;
@@ -57,7 +59,7 @@
     constructor(container, options) {
       if (!(container instanceof Element)) throw new TypeError("StudyViewer requires a DOM container.");
       this.container = container;
-      this.options = Object.assign({ initialSeries: null }, options || {});
+      this.options = Object.assign({ initialSeries: null, controls: "internal" }, options || {});
       if (!this.options.studyId || !this.options.manifestUrl) {
         throw new TypeError("StudyViewer requires studyId and manifestUrl options.");
       }
@@ -76,6 +78,7 @@
       ensureStyles(this.container.getRootNode ? this.container.getRootNode() : document);
       const root = document.createElement("div");
       root.className = "dss-root";
+      root.dataset.controls = this.options.controls === "external" ? "external" : "internal";
       root.innerHTML = `
         <div class="dss-seriesbar">
           <div class="dss-study">Loading study…</div>
@@ -158,6 +161,10 @@
         const viewer = new global.DicomSlideViewer.Viewer(this.viewerHost, {
           caseId: series.caseId,
           manifestUrl: new URL(series.manifest, this.study.baseUrl).href,
+          controls: this.options.controls,
+          studyTitle: this.options.controls === "external" ? (this.study.title || this.options.studyId) : null,
+          seriesTitle: this.options.controls === "external" ? series.title : null,
+          seriesNumber: this.options.controls === "external" ? (series.number || index + 1) : null,
         });
         this.viewer = viewer;
         await viewer.ready;
@@ -208,6 +215,13 @@
           seriesNumber: series ? series.number : null,
           seriesTitle: series ? series.title : null,
           totalSeries: this.study ? this.study.series.length : 0,
+          seriesOptions: this.study ? this.study.series.map((entry, index) => ({
+            id: entry.id,
+            number: entry.number || index + 1,
+            title: entry.title,
+            slices: entry.slices,
+            available: entry.available !== false,
+          })) : [],
         },
         this.viewer ? this.viewer.getState() : {}
       );

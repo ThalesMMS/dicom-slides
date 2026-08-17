@@ -78,6 +78,7 @@ def validate_html_and_scripts() -> None:
         "../runtime/dicom-slide.js",
         "studies.js",
         "dicom-importer.js",
+        "powerpoint-host.js",
         "content.js",
         'id="viewerMount"',
         'id="settingsForm"',
@@ -90,7 +91,7 @@ def validate_html_and_scripts() -> None:
     for fragment in required_fragments:
         require(fragment in html, f"content.html is missing {fragment!r}")
 
-    for relative in ("content.css", "content.js", "studies.js", "dicom-importer.js"):
+    for relative in ("content.css", "content.js", "studies.js", "dicom-importer.js", "powerpoint-host.js"):
         require((POWERPOINT / relative).is_file(), f"missing powerpoint/{relative}")
 
     javascript = (POWERPOINT / "content.js").read_text(encoding="utf-8")

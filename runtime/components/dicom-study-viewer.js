@@ -14,7 +14,7 @@
 
   class DicomStudyViewerElement extends HTMLElement {
     static get observedAttributes() {
-      return ["study-id", "src", "series", "mode", "preset", "slice", "tool"];
+      return ["study-id", "src", "series", "mode", "preset", "slice", "tool", "controls"];
     }
 
     constructor() {
@@ -47,7 +47,7 @@
 
     attributeChangedCallback(name, oldValue, newValue) {
       if (!this._connected || oldValue === newValue) return;
-      if (name === "study-id" || name === "src") {
+      if (name === "study-id" || name === "src" || name === "controls") {
         this._reload();
         return;
       }
@@ -77,6 +77,7 @@
           studyId,
           manifestUrl: source,
           initialSeries: this.getAttribute("series") || null,
+          controls: this.getAttribute("controls") === "external" ? "external" : "internal",
         });
         this._studyViewer = viewer;
         this._bindViewerEvents(viewer);

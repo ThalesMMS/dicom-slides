@@ -53,12 +53,22 @@ class FakeElement {
     this.listeners.set(type, listeners);
   }
 
+  dispatchEvent(event) {
+    event.target = event.target || this;
+    event.currentTarget = this;
+    event.preventDefault = event.preventDefault || (() => {});
+    for (const listener of this.listeners.get(event.type) || []) listener(event);
+    return true;
+  }
+
   appendChild(child) {
     this.children.push(child);
     return child;
   }
 
-  click() {}
+  click() {
+    this.dispatchEvent({ type: "click" });
+  }
 
   focus() {}
 
@@ -74,6 +84,10 @@ class FakeElement {
 
   setAttribute(name, value) {
     this.attributes[name] = String(value);
+  }
+
+  getAttribute(name) {
+    return this.attributes[name] ?? null;
   }
 }
 
@@ -91,6 +105,7 @@ async function createPowerPointHarness(savedConfig) {
   });
   const renderedStudyIds = [];
   const ensuredStudyIds = [];
+  const viewerActions = [];
   const localStorage = {
     reads: 0,
     value: JSON.stringify({
@@ -132,8 +147,18 @@ async function createPowerPointHarness(savedConfig) {
     "importProgressText", "cancelImportButton", "viewerMount", "emptyState", "emptyImportButton",
     "emptyStateTitle", "emptyStateMessage", "loadingPanel", "loadingText", "statusText", "studyLabel",
     "modeBadge", "seriesBadge", "sliceBadge",
+    "viewerToolbar", "importButton", "toolWindowButton", "toolPanButton", "toolZoomButton",
+    "toolScrollButton", "windowPresetSelect", "seriesSelect", "mode2dButton", "modeMprButton",
+    "mode3dButton", "resetViewButton", "expandViewButton",
   ];
   const elements = Object.fromEntries(ids.map((id) => [id, new FakeElement(id)]));
+  Object.assign(elements.toolWindowButton.dataset, { tool: "window" });
+  Object.assign(elements.toolPanButton.dataset, { tool: "pan" });
+  Object.assign(elements.toolZoomButton.dataset, { tool: "zoom" });
+  Object.assign(elements.toolScrollButton.dataset, { tool: "scroll" });
+  Object.assign(elements.mode2dButton.dataset, { mode: "stack" });
+  Object.assign(elements.modeMprButton.dataset, { mode: "mpr" });
+  Object.assign(elements.mode3dButton.dataset, { mode: "volume" });
   [
     "settingsPanel", "customSource", "localSource", "importProgress", "cancelImportButton", "emptyState",
   ].forEach((id) => { elements[id].hidden = true; });
@@ -146,15 +171,57 @@ async function createPowerPointHarness(savedConfig) {
       if (tagName !== "dicom-study-viewer") return new FakeElement("", tagName);
       const viewer = new FakeElement("", tagName);
       viewer.ready = Promise.resolve();
-      viewer.getState = () => ({
+      viewer.state = {
         activeTool: viewer.attributes.tool || "window",
         mode: viewer.attributes.mode || "stack",
         seriesId: viewer.attributes.series || "1",
         seriesNumber: viewer.attributes.series || "1",
+        seriesTitle: "T1Post1",
+        seriesOptions: [
+          { id: "series-1", number: "1", title: "T1Post1", slices: 14, available: true },
+          { id: "series-2", number: "2", title: "T1Post2", slices: 14, available: true },
+        ],
+        volumeSupported: true,
         slice: Number(viewer.attributes.slice || 0),
         studyTitle: viewer.attributes["study-id"] || "Study",
-      });
-      viewer.setWindow = async () => {};
+      };
+      viewer.getState = () => ({ ...viewer.state });
+      viewer.setWindow = async (center, width) => {
+        viewerActions.push(["setWindow", center, width]);
+        viewer.state.center = center;
+        viewer.state.width = width;
+      };
+      viewer.setSeries = async (value) => {
+        viewerActions.push(["setSeries", value]);
+        viewer.state.activeTool = "window";
+        const option = viewer.state.seriesOptions.find((entry) => entry.id === value);
+        if (option) Object.assign(viewer.state, {
+          seriesId: option.id,
+          seriesNumber: option.number,
+          seriesTitle: option.title,
+        });
+        viewer.dispatchEvent({ type: "dicom-series-change", detail: viewer.getState() });
+      };
+      viewer.setMode = async (value) => {
+        viewerActions.push(["setMode", value]);
+        viewer.state.mode = value;
+        viewer.dispatchEvent({ type: "dicom-mode-change", detail: viewer.getState() });
+      };
+      viewer.setPreset = async (value) => {
+        viewerActions.push(["setPreset", value]);
+      };
+      viewer.setTool = async (value) => {
+        viewerActions.push(["setTool", value]);
+        viewer.state.activeTool = value;
+        viewer.dispatchEvent({ type: "dicom-state-change", detail: viewer.getState() });
+      };
+      viewer.reset = async () => {
+        viewerActions.push(["reset"]);
+      };
+      viewer.setExpanded = async (value) => {
+        viewerActions.push(["setExpanded", Boolean(value)]);
+        viewer.state.expanded = Boolean(value);
+      };
       return viewer;
     },
     getElementById(id) {
@@ -274,6 +341,7 @@ async function createPowerPointHarness(savedConfig) {
     renderedStudyIds,
     resolveImporterReady,
     settings,
+    viewerActions,
   };
 }
 
@@ -338,11 +406,65 @@ async function testImportWaitsForSlideSettingsSave() {
   );
 }
 
+async function testCompactToolbarControlsThePublicViewerApi() {
+  const savedConfig = {
+    schemaVersion: 2,
+    sourceType: "local",
+    catalogId: "custom",
+    studyId: "local-study-x",
+    studyUrl: "dicom-slides-local:local-study-x",
+    series: "series-1",
+    mode: "stack",
+    preset: "default",
+    slice: 5,
+    tool: "window",
+    center: null,
+    width: null,
+  };
+  const harness = await createPowerPointHarness(savedConfig);
+  await finishBoot(harness);
+  const viewer = harness.elements.viewerMount.children[0];
+
+  assert.equal(viewer.attributes.controls, "external", "PowerPoint must own the only visible toolbar");
+  assert.deepEqual(
+    harness.elements.seriesSelect.children.map((option) => option.textContent),
+    ["1 · T1Post1", "2 · T1Post2"],
+    "the compact series dropdown must be populated from viewer state",
+  );
+
+  harness.elements.toolPanButton.click();
+  await flush();
+  harness.elements.windowPresetSelect.value = "bone";
+  harness.elements.windowPresetSelect.dispatchEvent({ type: "change" });
+  await flush();
+  harness.elements.seriesSelect.value = "series-2";
+  harness.elements.seriesSelect.dispatchEvent({ type: "change" });
+  await flush();
+  harness.elements.modeMprButton.click();
+  await flush();
+  harness.elements.resetViewButton.click();
+  await flush();
+
+  assert.deepEqual(harness.viewerActions.slice(-8), [
+    ["setTool", "pan"],
+    ["setPreset", "bone"],
+    ["setSeries", "series-2"],
+    ["setPreset", "bone"],
+    ["setTool", "pan"],
+    ["setMode", "stack"],
+    ["setMode", "mpr"],
+    ["reset"],
+  ]);
+  assert.equal(harness.elements.toolPanButton.attributes["aria-pressed"], "true");
+  assert.equal(harness.elements.modeMprButton.attributes["aria-pressed"], "true");
+}
+
 (async () => {
   const tests = {
     empty: testNewSlideStartsEmpty,
     restore: testSavedLocalStudyWinsTheOnlyBootRace,
     save: testImportWaitsForSlideSettingsSave,
+    toolbar: testCompactToolbarControlsThePublicViewerApi,
   };
   const selected = process.argv[2] ? { [process.argv[2]]: tests[process.argv[2]] } : tests;
   assert.ok(Object.values(selected).every((test) => typeof test === "function"), "unknown test name");

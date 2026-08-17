@@ -16,6 +16,8 @@
 .dsv-overlay-left{top:0;left:0}.dsv-overlay-right{top:0;right:0;text-align:right}.dsv-overlay-bottom{bottom:0;left:0;color:#c4d2dc}
 .dsv-loading{position:absolute;inset:0;z-index:3;display:grid;place-items:center;background:rgba(0,0,0,.42);color:#fff;font-weight:700;letter-spacing:.02em;transition:opacity .15s}.dsv-loading[hidden]{display:none}
 .dsv-footer{display:grid;grid-template-columns:auto minmax(80px,1fr) auto;align-items:center;gap:8px;padding:6px 10px;background:#0d1218;border-top:1px solid var(--dsv-line);color:var(--dsv-muted)}
+.dsv-root[data-controls="external"]{grid-template-rows:minmax(0,1fr) auto}
+.dsv-root[data-controls="external"] .dsv-toolbar{display:none}
 .dsv-slider{width:100%;accent-color:var(--dsv-accent)}.dsv-counter{font-variant-numeric:tabular-nums;color:#d7e0e7}.dsv-hint{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .dsv-error{position:absolute;inset:0;z-index:5;display:grid;place-items:center;padding:24px;background:#12080a;color:#ffd7dc;text-align:center;white-space:pre-wrap}
 .dsv-volume-toast{position:absolute;z-index:12;left:50%;bottom:18px;max-width:min(520px,86%);transform:translateX(-50%);padding:10px 13px;border:1px solid #72414a;border-radius:7px;background:rgba(38,12,17,.96);color:#ffd7dc;text-align:center;box-shadow:0 10px 32px rgba(0,0,0,.48)}
@@ -72,6 +74,10 @@
           initialPreset: null,
           smoothing: true,
           compact: false,
+          controls: "internal",
+          studyTitle: null,
+          seriesTitle: null,
+          seriesNumber: null,
         },
         options || {}
       );
@@ -116,6 +122,7 @@
       root.setAttribute("role", "application");
       root.setAttribute("aria-label", "Interactive medical viewer");
       root.dataset.viewMode = "stack";
+      root.dataset.controls = this.options.controls === "external" ? "external" : "internal";
       root.innerHTML = `
         <div class="dsv-toolbar">
           <div class="dsv-title">Loading study…</div>
@@ -452,6 +459,9 @@
         mode: this.state.mode,
         volumeReady: Boolean(this.volumeView),
         volumeMetrics: this.volumeData ? this.volumeData.metrics : null,
+        volumeSupported: Boolean(this.volumeCapability.supported),
+        volumeReason: this.volumeCapability.reason || null,
+        isColor: Boolean(this.isColor),
         totalSlices: this.manifest ? this.manifest.dimensions.slices : 0,
       };
     }
@@ -776,7 +786,18 @@
       if (!this.manifest) return;
       const total = this.manifest.dimensions.slices;
       const coordinate = this.manifest.sliceCoordinates ? this.manifest.sliceCoordinates[this.state.slice] : null;
-      this.leftOverlay.textContent = `${this.manifest.modality || "IMG"}\n${this.manifest.dimensions.columns} × ${this.manifest.dimensions.rows}\n${this.manifest.spacing.slice} mm`;
+      const identifiers = [];
+      if (this.options.studyTitle) identifiers.push(this.options.studyTitle);
+      if (this.options.seriesTitle) {
+        const prefix = this.options.seriesNumber == null ? "Series" : `Series ${this.options.seriesNumber}`;
+        identifiers.push(`${prefix} · ${this.options.seriesTitle}`);
+      }
+      identifiers.push(
+        this.manifest.modality || "IMG",
+        `${this.manifest.dimensions.columns} × ${this.manifest.dimensions.rows}`,
+        `${this.manifest.spacing.slice} mm`,
+      );
+      this.leftOverlay.textContent = identifiers.join("\n");
       const pixelStatus = this.isColor ? "RGB 8-bit" : `WL ${roundDisplay(this.state.center)}  WW ${roundDisplay(this.state.width)}`;
       this.rightOverlay.textContent = `Image ${this.state.slice + 1} / ${total}\n${pixelStatus}\nZoom ${Math.round(this.state.zoom * 100)}%${coordinate == null ? "" : `\nZ ${roundDisplay(coordinate)}`}`;
       this.counterElement.textContent = `${this.state.slice + 1} / ${total}`;

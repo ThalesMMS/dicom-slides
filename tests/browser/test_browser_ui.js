@@ -56,6 +56,33 @@ const baseUrl = process.env.DICOM_SLIDE_BASE_URL || "http://127.0.0.1:8765";
     });
     assert.deepEqual(forwardingResult, { first: "2", second: "1", seriesEvents: 2 });
 
+    await page.goto(`${baseUrl}/tests/browser/component-external-smoke.html`, { waitUntil: "load" });
+    const externalControlsResult = await page.locator("dicom-study-viewer").evaluate(async (external) => {
+      await external.ready;
+      const studyBar = external.shadowRoot.querySelector(".dss-seriesbar");
+      const viewerToolbar = external.shadowRoot.querySelector(".dsv-toolbar");
+      const overlay = external.shadowRoot.querySelector(".dsv-overlay-left");
+      const state = external.getState();
+      return {
+        studyBarDisplay: getComputedStyle(studyBar).display,
+        viewerToolbarDisplay: getComputedStyle(viewerToolbar).display,
+        overlayText: overlay.textContent,
+        seriesOptions: state.seriesOptions,
+        volumeSupported: state.volumeSupported,
+      };
+    });
+    assert.equal(externalControlsResult.studyBarDisplay, "none", "external controls must hide the study series bar");
+    assert.equal(externalControlsResult.viewerToolbarDisplay, "none", "external controls must hide the core toolbar");
+    assert.match(externalControlsResult.overlayText, /MRI-DIR — multi-series synthetic T1 MR/);
+    assert.match(externalControlsResult.overlayText, /Series 1 · T1Post1/);
+    assert.deepEqual(externalControlsResult.seriesOptions.map(({ number, title }) => ({ number, title })), [
+      { number: "1", title: "T1Post1" },
+      { number: "2", title: "T1Post2" },
+      { number: "3", title: "T1Post3" },
+      { number: "4", title: "T1Post4" },
+    ]);
+    assert.equal(typeof externalControlsResult.volumeSupported, "boolean");
+
     await page.goto(`${baseUrl}/tests/browser/iframe-host.html`, { waitUntil: "load" });
     await page.waitForFunction(() => window.adapterMessages.some((message) => message.type === "ready"));
     const adapterFrame = page.frames().find((frame) => /\/runtime\/iframe\/index\.html/.test(frame.url()));

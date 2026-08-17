@@ -21,6 +21,8 @@
     officeView: "edit",
     bootPromise: null,
     importAbortController: null,
+    expansionController: null,
+    expanded: false,
   };
 
   function byId(id) {
@@ -150,10 +152,6 @@
     runtime.elements.statusText.textContent = message;
   }
 
-  function modeLabel(mode) {
-    return mode === "mpr" ? "MPR" : mode === "volume" ? "3D" : "2D";
-  }
-
   function formatBytes(value) {
     const bytes = Number(value || 0);
     if (bytes < 1024) return `${bytes} B`;
@@ -165,18 +163,65 @@
     return global.__DICOM_SLIDE_STUDIES__?.[studyId] || null;
   }
 
-  function updateBadges(state) {
-    if (!state || typeof state !== "object") return;
-    runtime.elements.studyLabel.textContent = state.studyTitle || runtime.config.studyId || "DICOM study";
-    runtime.elements.modeBadge.textContent = modeLabel(state.mode || runtime.config.mode);
-    runtime.elements.seriesBadge.textContent = state.seriesTitle
-      ? `Series ${state.seriesNumber || state.seriesIndex + 1} · ${state.seriesTitle}`
-      : `Series ${runtime.config.series || "—"}`;
-    const currentSlice = Number.isFinite(state.slice) ? state.slice + 1 : null;
-    const totalSlices = Number.isFinite(state.totalSlices) ? state.totalSlices : null;
-    runtime.elements.sliceBadge.textContent = currentSlice == null
-      ? "Image —"
-      : `Image ${currentSlice}${totalSlices ? ` / ${totalSlices}` : ""}`;
+  function toolButtons() {
+    return [
+      runtime.elements.toolWindowButton,
+      runtime.elements.toolPanButton,
+      runtime.elements.toolZoomButton,
+      runtime.elements.toolScrollButton,
+    ];
+  }
+
+  function modeButtons() {
+    return [runtime.elements.mode2dButton, runtime.elements.modeMprButton, runtime.elements.mode3dButton];
+  }
+
+  function setViewerControlsEnabled(enabled, state = {}) {
+    const active = Boolean(enabled);
+    const stackMode = (state.mode || runtime.config?.mode || "stack") === "stack";
+    toolButtons().forEach((button) => {
+      button.disabled = !active || !stackMode || (button.dataset.tool === "window" && Boolean(state.isColor));
+    });
+    runtime.elements.windowPresetSelect.disabled = !active || Boolean(state.isColor);
+    runtime.elements.seriesSelect.disabled = !active || runtime.elements.seriesSelect.children.length === 0;
+    runtime.elements.mode2dButton.disabled = !active;
+    runtime.elements.modeMprButton.disabled = !active || state.volumeSupported !== true;
+    runtime.elements.mode3dButton.disabled = !active || state.volumeSupported !== true;
+    runtime.elements.resetViewButton.disabled = !active;
+    runtime.elements.expandViewButton.disabled = !active && !runtime.expanded;
+  }
+
+  function updateSeriesSelect(state) {
+    const entries = Array.isArray(state.seriesOptions) ? state.seriesOptions : [];
+    const signature = entries.map((entry) => `${entry.id}:${entry.number}:${entry.title}:${entry.available}`).join("|");
+    if (runtime.elements.seriesSelect.dataset.signature !== signature) {
+      runtime.elements.seriesSelect.replaceChildren();
+      entries.forEach((entry, index) => {
+        const option = document.createElement("option");
+        option.value = entry.id;
+        option.textContent = `${entry.number || index + 1} · ${entry.title}`;
+        option.disabled = entry.available === false;
+        runtime.elements.seriesSelect.appendChild(option);
+      });
+      runtime.elements.seriesSelect.dataset.signature = signature;
+    }
+    if (entries.length) runtime.elements.seriesSelect.value = state.seriesId || runtime.config?.series || entries[0].id;
+  }
+
+  function updateToolbar(state = {}) {
+    if (!runtime.elements.viewerToolbar) return;
+    const loaded = Boolean(runtime.viewer);
+    const activeTool = state.activeTool || runtime.config?.tool || "window";
+    const activeMode = state.mode || runtime.config?.mode || "stack";
+    updateSeriesSelect(state);
+    toolButtons().forEach((button) => {
+      button.setAttribute("aria-pressed", String(button.dataset.tool === activeTool));
+    });
+    modeButtons().forEach((button) => {
+      button.setAttribute("aria-pressed", String(button.dataset.mode === activeMode));
+    });
+    runtime.elements.windowPresetSelect.value = runtime.config?.preset || "default";
+    setViewerControlsEnabled(loaded, state);
   }
 
   function captureViewerState() {
@@ -190,7 +235,7 @@
       center: Number.isFinite(state.center) ? state.center : runtime.config.center,
       width: Number.isFinite(state.width) ? state.width : runtime.config.width,
     }));
-    updateBadges(state);
+    updateToolbar(state);
     return runtime.config;
   }
 
@@ -284,7 +329,7 @@
   function setSettingsOpen(open) {
     const isOpen = Boolean(open) && runtime.officeView !== "read";
     runtime.elements.settingsPanel.hidden = !isOpen;
-    runtime.elements.settingsButton.setAttribute("aria-expanded", String(isOpen));
+    runtime.elements.importButton.setAttribute("aria-expanded", String(isOpen));
     if (isOpen) runtime.elements.catalogId.focus({ preventScroll: true });
   }
 
@@ -297,10 +342,9 @@
     runtime.elements.emptyState.hidden = false;
     runtime.elements.emptyStateTitle.textContent = options.title || "No study loaded";
     runtime.elements.emptyStateMessage.textContent = options.message || "Import DICOM files, a folder, or a ZIP archive to begin.";
-    runtime.elements.studyLabel.textContent = options.studyLabel || "No study loaded";
-    runtime.elements.modeBadge.textContent = "2D";
-    runtime.elements.seriesBadge.textContent = "Series —";
-    runtime.elements.sliceBadge.textContent = "Image —";
+    runtime.elements.seriesSelect.replaceChildren();
+    runtime.elements.seriesSelect.dataset.signature = "";
+    updateToolbar({ mode: "stack", activeTool: "window", seriesOptions: [] });
     clearLoading();
     syncForm(config);
     setSettingsOpen(options.openSettings !== false);
@@ -406,7 +450,8 @@
       "dicom-mode-change",
     ];
     stateEvents.forEach((eventName) => {
-      viewer.addEventListener(eventName, () => {
+      viewer.addEventListener(eventName, (event) => {
+        updateToolbar(event.detail || viewer.getState?.() || {});
         captureViewerState();
         scheduleSave();
       });
@@ -422,6 +467,9 @@
       setLoading(message, true);
       setStatus("Error loading the study.");
     });
+    viewer.addEventListener("dicom-expand-request", (event) => {
+      setExpanded(Boolean(event.detail?.expanded));
+    });
   }
 
   async function renderViewer(config, options = {}) {
@@ -435,10 +483,7 @@
     runtime.config = normalized;
     runtime.elements.emptyState.hidden = true;
     syncForm(normalized);
-    updateBadges({
-      studyTitle: registeredStudy(normalized.studyId)?.title || findCatalogItem(normalized.catalogId)?.label || normalized.studyId,
-      mode: normalized.mode,
-    });
+    updateToolbar({ mode: normalized.mode, activeTool: normalized.tool, seriesOptions: [] });
     setLoading(normalized.sourceType === "local" ? "Restoring the converted study from the local cache…" : "Loading study and pixels…");
     setStatus("Loading slide content…");
 
@@ -457,6 +502,7 @@
       viewer.setAttribute("preset", normalized.preset);
       viewer.setAttribute("slice", String(normalized.slice));
       viewer.setAttribute("tool", normalized.tool);
+      viewer.setAttribute("controls", "external");
       viewer.setAttribute("aria-label", `Viewer for study ${normalized.studyId}`);
       bindViewerEvents(viewer);
 
@@ -464,10 +510,12 @@
       runtime.elements.viewerMount.replaceChildren(viewer);
       await viewer.ready;
       if (generation !== runtime.generation || runtime.viewer !== viewer) return;
+      if (runtime.expanded) await viewer.setExpanded(true);
       if (normalized.center != null && normalized.width != null) {
         await viewer.setWindow(normalized.center, normalized.width);
       }
       captureViewerState();
+      updateToolbar(viewer.getState?.() || {});
       clearLoading();
       if (normalized.sourceType === "local") {
         setStatus("Viewer ready; pixels are in this device's local cache.");
@@ -549,6 +597,7 @@
       } else {
         showEmptyState({ persist: false });
       }
+      await runtime.expansionController?.initialize();
       return;
     }
 
@@ -574,6 +623,7 @@
     }
     applyOfficeView(await getActiveView());
     registerActiveViewChanged();
+    await runtime.expansionController?.initialize();
     if (runtime.viewer) {
       setStatus(runtime.config?.sourceType === "local"
         ? "Connected to PowerPoint; state is in the slide and pixels are in the local cache."
@@ -678,10 +728,87 @@
     });
   }
 
+  async function runViewerCommand(command, configPatch = null) {
+    if (!runtime.viewer || typeof command !== "function") return;
+    try {
+      if (configPatch) runtime.config = normalizeConfig(Object.assign({}, runtime.config, configPatch));
+      await command(runtime.viewer);
+      captureViewerState();
+      updateToolbar(runtime.viewer.getState?.() || {});
+      scheduleSave();
+    } catch (error) {
+      setStatus(error?.message || "The viewer command failed.");
+    }
+  }
+
+  function applyExpandedUi(value) {
+    const expanded = Boolean(value);
+    runtime.expanded = expanded;
+    document.body.classList.toggle("viewer-expanded", expanded);
+    runtime.elements.expandViewButton.setAttribute("aria-pressed", String(expanded));
+    runtime.elements.expandViewButton.setAttribute(
+      "aria-label",
+      expanded ? "Restore viewer size" : "Expand viewer to fill the slide",
+    );
+    runtime.elements.expandViewButton.title = expanded ? "Restore viewer size" : "Expand viewer to fill the slide";
+    runtime.elements.expandViewButton.disabled = !runtime.viewer && !expanded;
+  }
+
+  async function setExpanded(value) {
+    if (runtime.expansionController) return runtime.expansionController.setExpanded(Boolean(value));
+    applyExpandedUi(value);
+    if (runtime.viewer?.setExpanded) await runtime.viewer.setExpanded(Boolean(value));
+    return Boolean(value);
+  }
+
+  function createExpansionController() {
+    if (runtime.expansionController || !global.DicomSlidesPowerPointHost) return runtime.expansionController;
+    runtime.expansionController = global.DicomSlidesPowerPointHost.createExpansionController({
+      getViewer: () => runtime.viewer,
+      onExpandedChange: applyExpandedUi,
+      onStatus: setStatus,
+    });
+    return runtime.expansionController;
+  }
+
   function bindUi() {
-    runtime.elements.settingsButton.addEventListener("click", () => {
+    runtime.elements.importButton.addEventListener("click", () => {
       setSettingsOpen(runtime.elements.settingsPanel.hidden);
     });
+    toolButtons().forEach((button) => {
+      button.addEventListener("click", () => {
+        const tool = button.dataset.tool;
+        runViewerCommand((viewer) => viewer.setTool(tool), { tool });
+      });
+    });
+    runtime.elements.windowPresetSelect.addEventListener("change", (event) => {
+      const preset = event.target.value;
+      runViewerCommand((viewer) => viewer.setPreset(preset), { preset, center: null, width: null });
+    });
+    runtime.elements.seriesSelect.addEventListener("change", (event) => {
+      const series = event.target.value;
+      const desired = {
+        mode: runtime.config?.mode || "stack",
+        preset: runtime.config?.preset || "default",
+        tool: runtime.config?.tool || "window",
+      };
+      runViewerCommand(async (viewer) => {
+        await viewer.setSeries(series);
+        await viewer.setPreset(desired.preset);
+        await viewer.setTool(desired.tool);
+        await viewer.setMode(desired.mode);
+      }, { series });
+    });
+    modeButtons().forEach((button) => {
+      button.addEventListener("click", () => {
+        const mode = button.dataset.mode;
+        runViewerCommand((viewer) => viewer.setMode(mode), { mode });
+      });
+    });
+    runtime.elements.resetViewButton.addEventListener("click", () => {
+      runViewerCommand((viewer) => viewer.reset(), { preset: "default", center: null, width: null });
+    });
+    runtime.elements.expandViewButton.addEventListener("click", () => setExpanded(!runtime.expanded));
     runtime.elements.closeSettingsButton.addEventListener("click", () => setSettingsOpen(false));
     runtime.elements.catalogId.addEventListener("change", (event) => {
       applyCatalogDefaults(event.target.value);
@@ -774,8 +901,19 @@
 
   async function initializeUi() {
     runtime.elements = {
-      authoringBar: byId("authoringBar"),
-      settingsButton: byId("settingsButton"),
+      viewerToolbar: byId("viewerToolbar"),
+      importButton: byId("importButton"),
+      toolWindowButton: byId("toolWindowButton"),
+      toolPanButton: byId("toolPanButton"),
+      toolZoomButton: byId("toolZoomButton"),
+      toolScrollButton: byId("toolScrollButton"),
+      windowPresetSelect: byId("windowPresetSelect"),
+      seriesSelect: byId("seriesSelect"),
+      mode2dButton: byId("mode2dButton"),
+      modeMprButton: byId("modeMprButton"),
+      mode3dButton: byId("mode3dButton"),
+      resetViewButton: byId("resetViewButton"),
+      expandViewButton: byId("expandViewButton"),
       settingsPanel: byId("settingsPanel"),
       closeSettingsButton: byId("closeSettingsButton"),
       settingsForm: byId("settingsForm"),
@@ -812,14 +950,11 @@
       loadingPanel: byId("loadingPanel"),
       loadingText: byId("loadingText"),
       statusText: byId("statusText"),
-      studyLabel: byId("studyLabel"),
-      modeBadge: byId("modeBadge"),
-      seriesBadge: byId("seriesBadge"),
-      sliceBadge: byId("sliceBadge"),
     };
 
     populateCatalog();
     bindUi();
+    createExpansionController();
     if (global.DicomSlidesImporter?.ready) await global.DicomSlidesImporter.ready;
     if (hasOfficeRuntime()) {
       showEmptyState({ persist: false });
@@ -831,6 +966,7 @@
     } else {
       showEmptyState({ persist: false });
     }
+    await runtime.expansionController?.initialize();
   }
 
   function boot() {
