@@ -32,18 +32,36 @@ The production manifest expects this repository to be published at:
 https://thalesmms.github.io/dicom-slides/
 ```
 
-After the files are present on GitHub Pages:
+After the files are present on GitHub Pages, download
+`powerpoint/manifest.xml` and sideload it using the procedure for the PowerPoint
+client in which you will test the add-in.
 
-1. Download `powerpoint/manifest.xml`.
-2. In PowerPoint, open the Office Add-ins dialog.
-3. Choose **My Add-ins** / **Manage My Add-ins** and upload the manifest.
-4. Insert **DICOM Slides** into the current slide.
-5. Select the gear button to choose a study, series, initial image, mode,
-   window preset, and 2D tool.
-6. Resize the content add-in like any other slide object.
+### PowerPoint on the web
 
-The exact labels in the Add-ins dialog vary between PowerPoint on Windows, Mac,
-and the web version.
+1. Open a presentation and choose **Home > Add-ins > More Settings**.
+2. Choose **Upload My Add-in** and select `manifest.xml`.
+3. Insert **DICOM Slides** into the current slide.
+
+### PowerPoint for macOS
+
+1. Close PowerPoint.
+2. In Finder, choose **Go > Go to Folder** and open:
+
+   ```text
+   ~/Library/Containers/com.microsoft.Powerpoint/Data/Documents/wef
+   ```
+
+3. Create the `wef` directory when it does not exist, then copy
+   `manifest.xml` into it.
+4. Reopen PowerPoint and choose **Home > Add-ins > DICOM Slides**.
+
+For managed or broader Windows deployment, use the Microsoft 365 admin center
+or an Office trusted add-in catalog. Uploading the XML manifest in PowerPoint
+on the web is the simplest cross-platform development check.
+
+After insertion, select the gear button to choose a study, series, initial
+image, mode, window preset, and 2D tool. Resize the content add-in like any
+other slide object.
 
 ## Behavior
 
