@@ -1,0 +1,217 @@
+:root {
+  --bg: #05070a;
+  --panel: #111820;
+  --panel-strong: #17212b;
+  --line: #2a3743;
+  --text: #eef5fa;
+  --muted: #96a8b6;
+  --accent: #38bdf8;
+  --accent-strong: #0ea5e9;
+  --danger: #ffb4bd;
+  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: var(--text);
+  background: var(--bg);
+}
+
+* { box-sizing: border-box; }
+html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: var(--bg); }
+button, input, select { font: inherit; }
+button, select { cursor: pointer; }
+button:focus-visible, input:focus-visible, select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.app-shell {
+  width: 100%;
+  height: 100%;
+  min-width: 260px;
+  min-height: 220px;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  overflow: hidden;
+  background: var(--bg);
+}
+
+.topbar {
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 44px 6px 8px;
+  border-bottom: 1px solid var(--line);
+  background: linear-gradient(180deg, #17212b, #0d1319);
+}
+
+.icon-button {
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  display: inline-grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid #3a4854;
+  border-radius: 7px;
+  color: var(--text);
+  background: #17212b;
+  font-size: 18px;
+}
+.icon-button:hover { border-color: var(--accent); background: #20313d; }
+
+.brand-block { min-width: 0; display: grid; gap: 1px; }
+.brand-block strong { font-size: 13px; letter-spacing: .01em; }
+.brand-block span {
+  max-width: 42vw;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.state-badges { min-width: 0; margin-left: auto; display: flex; align-items: center; gap: 5px; }
+.badge {
+  max-width: 150px;
+  overflow: hidden;
+  padding: 4px 7px;
+  border: 1px solid #33424e;
+  border-radius: 999px;
+  background: #0d151c;
+  color: #c8d6e0;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.viewer-region { position: relative; min-height: 0; overflow: hidden; background: #000; }
+.viewer-mount { position: absolute; inset: 0; min-height: 0; }
+.viewer-mount > dicom-study-viewer { display: block; width: 100%; height: 100%; min-height: 0; }
+
+.loading-panel {
+  position: absolute;
+  z-index: 30;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 10px;
+  padding: 24px;
+  background: rgba(3, 5, 8, .88);
+  color: #dbe7ee;
+  text-align: center;
+}
+.loading-panel[hidden] { display: none; }
+.spinner {
+  width: 28px;
+  height: 28px;
+  border: 3px solid #334653;
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin .8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.settings-panel {
+  position: absolute;
+  z-index: 40;
+  top: 10px;
+  left: 10px;
+  width: min(420px, calc(100% - 20px));
+  max-height: calc(100% - 20px);
+  overflow: auto;
+  padding: 14px;
+  border: 1px solid #3a4a57;
+  border-radius: 11px;
+  background: rgba(14, 20, 27, .98);
+  box-shadow: 0 18px 54px rgba(0, 0, 0, .62);
+  scrollbar-width: thin;
+}
+.settings-panel[hidden] { display: none; }
+.settings-heading { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 13px; }
+.settings-heading > div { min-width: 0; display: grid; gap: 3px; }
+.settings-heading strong { font-size: 15px; }
+.settings-heading span { color: var(--muted); font-size: 11px; line-height: 1.4; }
+.settings-heading .icon-button { margin-left: auto; }
+
+#settingsForm { display: grid; gap: 12px; }
+.field-grid, .custom-source { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.custom-source[hidden] { display: none; }
+.field { min-width: 0; display: grid; gap: 5px; }
+.field > span { color: #b9c7d1; font-size: 11px; font-weight: 700; }
+.field input, .field select {
+  width: 100%;
+  min-width: 0;
+  height: 36px;
+  padding: 0 9px;
+  border: 1px solid #3b4a56;
+  border-radius: 7px;
+  color: var(--text);
+  background: #111a22;
+}
+.field input::placeholder { color: #6f818f; }
+.full-width { grid-column: 1 / -1; }
+code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.security-note {
+  margin: 0;
+  padding: 9px 10px;
+  border: 1px solid #594650;
+  border-radius: 7px;
+  background: #22151a;
+  color: #e6c9cf;
+  font-size: 10px;
+  line-height: 1.45;
+}
+.form-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.primary-button, .secondary-button {
+  min-height: 36px;
+  padding: 0 12px;
+  border-radius: 7px;
+  font-weight: 700;
+}
+.primary-button { border: 1px solid #4bc8fb; color: #021018; background: var(--accent); }
+.primary-button:hover { background: #67d2fc; }
+.secondary-button { border: 1px solid #3b4a56; color: #d9e4eb; background: #16202a; }
+.secondary-button:hover { border-color: #607484; }
+
+.brandbar {
+  min-height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 9px;
+  border-top: 1px solid var(--line);
+  background: #0b1015;
+  color: #8093a2;
+  font-size: 9px;
+  line-height: 1.25;
+}
+.brandbar span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.brandbar span:last-child { text-align: right; }
+
+body[data-office-view="read"] .authoring-only { display: none !important; }
+body[data-office-view="read"] .app-shell { grid-template-rows: minmax(0, 1fr) auto; }
+body[data-office-view="read"] .topbar { display: none; }
+body[data-office-view="read"] .brandbar { opacity: .76; }
+
+.error-state .loading-panel { background: rgba(25, 7, 11, .94); color: var(--danger); }
+
+@media (max-width: 620px) {
+  .topbar { padding-left: 6px; gap: 6px; }
+  .brand-block span { display: none; }
+  .badge:nth-child(2) { display: none; }
+  .field-grid, .custom-source { grid-template-columns: 1fr; }
+  .full-width { grid-column: auto; }
+  .brandbar span:last-child { display: none; }
+}
+
+@media (max-height: 400px) {
+  .topbar { min-height: 40px; }
+  .icon-button { width: 30px; height: 30px; }
+  .brandbar { min-height: 22px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner { animation-duration: 1.8s; }
+}
