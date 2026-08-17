@@ -77,26 +77,82 @@ def validate_html_and_scripts() -> None:
         "https://appsforoffice.microsoft.com/lib/1/hosted/office.js",
         "../runtime/dicom-slide.js",
         "studies.js",
+        "dicom-importer.js",
         "content.js",
         'id="viewerMount"',
         'id="settingsForm"',
+        'id="importFilesInput"',
+        'id="importFolderInput"',
+        'id="importZipInput"',
+        'id="importDropZone"',
+        "webkitdirectory",
     )
     for fragment in required_fragments:
         require(fragment in html, f"content.html is missing {fragment!r}")
 
-    for relative in ("content.css", "content.js", "studies.js"):
+    for relative in ("content.css", "content.js", "studies.js", "dicom-importer.js"):
         require((POWERPOINT / relative).is_file(), f"missing powerpoint/{relative}")
 
     javascript = (POWERPOINT / "content.js").read_text(encoding="utf-8")
-    for token in ("Office.onReady", "getActiveViewAsync", "ActiveViewChanged", "document.settings", "dicom-study-viewer"):
+    for token in (
+        "Office.onReady",
+        "getActiveViewAsync",
+        "ActiveViewChanged",
+        "document.settings",
+        "dicom-study-viewer",
+        "importLocalFiles",
+        "ensureRegistered",
+        "dicom-slides-local:",
+    ):
         require(token in javascript, f"content.js is missing required integration token {token!r}")
     require("eval(" not in javascript, "content.js must not use eval")
+
+
+def validate_importer() -> None:
+    path = POWERPOINT / "dicom-importer.js"
+    require(path.is_file(), "missing powerpoint/dicom-importer.js")
+    javascript = path.read_text(encoding="utf-8")
+    required_tokens = (
+        "parseDicomBuffer",
+        "CompressionStream",
+        "DecompressionStream",
+        "indexedDB",
+        "registerManifest",
+        "registerChunk",
+        "dicom-slide-study/1",
+        "dicom-slide-volume/1",
+        "dicom-slides-local:",
+        "rescaleSlope",
+        "rescaleIntercept",
+        "patientName",
+        "patientID",
+    )
+    for token in required_tokens:
+        require(token in javascript, f"dicom-importer.js is missing {token!r}")
+    require("eval(" not in javascript, "dicom-importer.js must not use eval")
+    require("Function(" not in javascript, "dicom-importer.js must not construct dynamic functions")
+
+
+def validate_documentation() -> None:
+    readme = (POWERPOINT / "README.md").read_text(encoding="utf-8")
+    for token in (
+        "manifest.xml",
+        "GitHub Pages",
+        "Office.context.document.settings",
+        "IndexedDB",
+        "not embedded into the `.pptx`",
+        "Implicit VR Little Endian",
+        "CompressionStream",
+    ):
+        require(token in readme, f"powerpoint/README.md is missing {token!r}")
 
 
 def main() -> int:
     try:
         validate_manifest()
         validate_html_and_scripts()
+        validate_importer()
+        validate_documentation()
     except (ET.ParseError, OSError, ValueError) as error:
         print(f"PowerPoint add-in validation failed: {error}", file=sys.stderr)
         return 1

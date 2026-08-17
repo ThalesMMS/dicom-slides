@@ -3,6 +3,7 @@
 
   const SETTINGS_KEY = "dicomSlides.powerPoint.config.v1";
   const LOCAL_STORAGE_KEY = "dicomSlides.powerPoint.preview.v1";
+  const SCHEMA_VERSION = 2;
   const VALID_MODES = new Set(["stack", "mpr", "volume"]);
   const VALID_PRESETS = new Set(["default", "abdomen", "lung", "bone", "brain"]);
   const VALID_TOOLS = new Set(["window", "pan", "zoom", "scroll"]);
@@ -19,6 +20,7 @@
     officeConnected: false,
     officeView: "edit",
     booted: false,
+    importAbortController: null,
   };
 
   function byId(id) {
@@ -46,7 +48,8 @@
       defaultSlice: 0,
     };
     return {
-      schemaVersion: 1,
+      schemaVersion: SCHEMA_VERSION,
+      sourceType: entry.id === "custom" ? "remote" : "catalog",
       catalogId: entry.id || "custom",
       studyId: entry.studyId || "",
       studyUrl: entry.studyUrl || "",
@@ -64,10 +67,15 @@
     const candidate = input && typeof input === "object" ? input : {};
     const requestedCatalog = findCatalogItem(candidate.catalogId);
     const base = defaultConfig(requestedCatalog?.id || catalog[0]?.id || "custom");
-    const catalogId = requestedCatalog ? requestedCatalog.id : "custom";
+    const localByUrl = Boolean(global.DicomSlidesImporter?.isLocalStudyUrl(candidate.studyUrl));
+    const sourceType = candidate.sourceType === "local" || localByUrl
+      ? "local"
+      : requestedCatalog ? "catalog" : "remote";
+    const catalogId = sourceType === "catalog" && requestedCatalog ? requestedCatalog.id : "custom";
 
     const result = {
-      schemaVersion: 1,
+      schemaVersion: SCHEMA_VERSION,
+      sourceType,
       catalogId,
       studyId: String(candidate.studyId ?? base.studyId).trim(),
       studyUrl: String(candidate.studyUrl ?? base.studyUrl).trim(),
@@ -93,6 +101,17 @@
       resolved = new URL(config.studyUrl, global.location.href);
     } catch (_) {
       throw new Error("A URL do study.js é inválida.");
+    }
+
+    if (resolved.protocol === "dicom-slides-local:") {
+      if (config.sourceType !== "local" || !global.DicomSlidesImporter) {
+        throw new Error("A referência local do estudo é inválida.");
+      }
+      const urlStudyId = global.DicomSlidesImporter.studyIdFromLocalUrl(resolved.href);
+      if (urlStudyId && urlStudyId !== config.studyId.toLowerCase()) {
+        throw new Error("O ID do estudo não corresponde ao pacote local.");
+      }
+      return resolved.href;
     }
 
     const isLocalDevelopment = ["localhost", "127.0.0.1", "[::1]"].includes(resolved.hostname);
@@ -122,6 +141,17 @@
 
   function modeLabel(mode) {
     return mode === "mpr" ? "MPR" : mode === "volume" ? "3D" : "2D";
+  }
+
+  function formatBytes(value) {
+    const bytes = Number(value || 0);
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KiB`;
+    return `${(bytes / 1024 / 1024).toFixed(1)} MiB`;
+  }
+
+  function registeredStudy(studyId) {
+    return global.__DICOM_SLIDE_STUDIES__?.[studyId] || null;
   }
 
   function updateBadges(state) {
@@ -156,7 +186,8 @@
   function serializeConfig() {
     const config = captureViewerState();
     return {
-      schemaVersion: 1,
+      schemaVersion: SCHEMA_VERSION,
+      sourceType: config.sourceType,
       catalogId: config.catalogId,
       studyId: config.studyId,
       studyUrl: config.studyUrl,
@@ -201,7 +232,7 @@
         if (result.status === global.Office.AsyncResultStatus.Failed) {
           setStatus(`Não foi possível salvar o estado: ${result.error.message}`);
         } else {
-          setStatus("Estado salvo no slide.");
+          setStatus(config.sourceType === "local" ? "Estado salvo; pixels mantidos no cache local deste dispositivo." : "Estado salvo no slide.");
         }
       });
     } catch (error) {
@@ -233,11 +264,29 @@
     if (isOpen) runtime.elements.catalogId.focus({ preventScroll: true });
   }
 
-  function syncCustomSourceVisibility() {
+  function updateLocalSourceSummary(config) {
+    const study = registeredStudy(config.studyId);
+    if (!study) {
+      runtime.elements.localSourceSummary.textContent = `${config.studyId}. O pacote será restaurado do cache quando necessário.`;
+      return;
+    }
+    const images = Array.isArray(study.series) ? study.series.reduce((sum, item) => sum + Number(item.slices || 0), 0) : 0;
+    runtime.elements.localSourceSummary.textContent = `${study.title || config.studyId} · ${study.seriesCount || study.series?.length || 0} série(s) · ${images} imagem(ns)`;
+  }
+
+  function syncSourceVisibility(config = runtime.config) {
+    const customOption = runtime.elements.catalogId.querySelector('option[value="custom"]');
     const isCustom = runtime.elements.catalogId.value === "custom";
-    runtime.elements.customSource.hidden = !isCustom;
-    runtime.elements.studyId.required = isCustom;
-    runtime.elements.studyUrl.required = isCustom;
+    const isLocal = isCustom && config?.sourceType === "local";
+    const isRemote = isCustom && !isLocal;
+    runtime.elements.customSource.hidden = !isRemote;
+    runtime.elements.localSource.hidden = !isLocal;
+    runtime.elements.studyId.required = isRemote;
+    runtime.elements.studyUrl.required = isRemote;
+    runtime.elements.studyId.disabled = !isRemote;
+    runtime.elements.studyUrl.disabled = !isRemote;
+    if (customOption) customOption.textContent = isLocal ? "Exame importado neste dispositivo" : "Pacote personalizado (HTTPS)";
+    if (isLocal) updateLocalSourceSummary(config);
   }
 
   function syncForm(config) {
@@ -250,17 +299,33 @@
     runtime.elements.mode.value = config.mode;
     runtime.elements.preset.value = config.preset;
     runtime.elements.tool.value = config.tool;
-    syncCustomSourceVisibility();
+    syncSourceVisibility(config);
+  }
+
+  function remoteCustomConfig() {
+    return normalizeConfig({
+      schemaVersion: SCHEMA_VERSION,
+      sourceType: "remote",
+      catalogId: "custom",
+      studyId: "",
+      studyUrl: "",
+      series: "1",
+      slice: 0,
+      mode: runtime.config?.mode || "stack",
+      preset: runtime.config?.preset || "default",
+      tool: runtime.config?.tool || "window",
+      center: null,
+      width: null,
+    });
   }
 
   function applyCatalogDefaults(catalogId) {
     if (catalogId === "custom") {
-      const next = Object.assign({}, runtime.config, { catalogId: "custom" });
-      syncForm(normalizeConfig(next));
+      runtime.config = remoteCustomConfig();
+      syncForm(runtime.config);
       return;
     }
-    const next = defaultConfig(catalogId);
-    runtime.config = normalizeConfig(next);
+    runtime.config = normalizeConfig(defaultConfig(catalogId));
     syncForm(runtime.config);
   }
 
@@ -268,10 +333,12 @@
     const catalogId = runtime.elements.catalogId.value;
     const entry = findCatalogItem(catalogId);
     const current = runtime.config || defaultConfig(catalog[0]?.id);
+    const keepLocal = !entry && current.sourceType === "local" && runtime.elements.localSource.hidden === false;
     return normalizeConfig({
+      sourceType: entry ? "catalog" : keepLocal ? "local" : "remote",
       catalogId: entry ? entry.id : "custom",
-      studyId: entry ? entry.studyId : runtime.elements.studyId.value,
-      studyUrl: entry ? entry.studyUrl : runtime.elements.studyUrl.value,
+      studyId: entry ? entry.studyId : keepLocal ? current.studyId : runtime.elements.studyId.value,
+      studyUrl: entry ? entry.studyUrl : keepLocal ? current.studyUrl : runtime.elements.studyUrl.value,
       series: runtime.elements.series.value,
       slice: runtime.elements.slice.value,
       mode: runtime.elements.mode.value,
@@ -279,7 +346,6 @@
       tool: runtime.elements.tool.value,
       center: null,
       width: null,
-      previous: current,
     });
   }
 
@@ -316,27 +382,32 @@
     runtime.config = normalized;
     syncForm(normalized);
     updateBadges({
-      studyTitle: findCatalogItem(normalized.catalogId)?.label || normalized.studyId,
+      studyTitle: registeredStudy(normalized.studyId)?.title || findCatalogItem(normalized.catalogId)?.label || normalized.studyId,
       mode: normalized.mode,
     });
-    setLoading("Carregando estudo e pixels…");
+    setLoading(normalized.sourceType === "local" ? "Restaurando exame convertido do cache local…" : "Carregando estudo e pixels…");
     setStatus("Carregando conteúdo do slide…");
 
-    const viewer = document.createElement("dicom-study-viewer");
-    viewer.setAttribute("study-id", normalized.studyId);
-    viewer.setAttribute("src", studyUrl);
-    viewer.setAttribute("series", normalized.series);
-    viewer.setAttribute("mode", normalized.mode);
-    viewer.setAttribute("preset", normalized.preset);
-    viewer.setAttribute("slice", String(normalized.slice));
-    viewer.setAttribute("tool", normalized.tool);
-    viewer.setAttribute("aria-label", `Visualizador do estudo ${normalized.studyId}`);
-    bindViewerEvents(viewer);
-
-    runtime.viewer = viewer;
-    runtime.elements.viewerMount.replaceChildren(viewer);
-
     try {
+      if (normalized.sourceType === "local") {
+        if (!global.DicomSlidesImporter) throw new Error("O importador DICOM local não foi carregado.");
+        await global.DicomSlidesImporter.ensureRegistered(normalized.studyId);
+        if (generation !== runtime.generation) return;
+      }
+
+      const viewer = document.createElement("dicom-study-viewer");
+      viewer.setAttribute("study-id", normalized.studyId);
+      viewer.setAttribute("src", studyUrl);
+      viewer.setAttribute("series", normalized.series);
+      viewer.setAttribute("mode", normalized.mode);
+      viewer.setAttribute("preset", normalized.preset);
+      viewer.setAttribute("slice", String(normalized.slice));
+      viewer.setAttribute("tool", normalized.tool);
+      viewer.setAttribute("aria-label", `Visualizador do estudo ${normalized.studyId}`);
+      bindViewerEvents(viewer);
+
+      runtime.viewer = viewer;
+      runtime.elements.viewerMount.replaceChildren(viewer);
       await viewer.ready;
       if (generation !== runtime.generation || runtime.viewer !== viewer) return;
       if (normalized.center != null && normalized.width != null) {
@@ -344,12 +415,18 @@
       }
       captureViewerState();
       clearLoading();
-      setStatus(runtime.officeConnected ? "Visualizador pronto; estado salvo no slide." : "Prévia no navegador; abra pelo PowerPoint para salvar no slide.");
+      if (normalized.sourceType === "local") {
+        setStatus("Visualizador pronto; os pixels estão no cache local deste dispositivo.");
+      } else {
+        setStatus(runtime.officeConnected ? "Visualizador pronto; estado salvo no slide." : "Prévia no navegador; abra pelo PowerPoint para salvar no slide.");
+      }
       if (options.persist !== false) scheduleSave();
+      return viewer;
     } catch (error) {
-      if (generation !== runtime.generation) return;
+      if (generation !== runtime.generation) return null;
       setLoading(error.message || String(error), true);
       setStatus("Erro ao carregar o estudo.");
+      throw error;
     }
   }
 
@@ -418,7 +495,102 @@
     }
     applyOfficeView(await getActiveView());
     registerActiveViewChanged();
-    setStatus("Conectado ao PowerPoint; o estado será salvo neste slide.");
+    setStatus(runtime.config?.sourceType === "local"
+      ? "Conectado ao PowerPoint; estado no slide e pixels no cache local."
+      : "Conectado ao PowerPoint; o estado será salvo neste slide.");
+  }
+
+  function setImportBusy(busy) {
+    const controls = [
+      runtime.elements.importFilesButton,
+      runtime.elements.importFolderButton,
+      runtime.elements.importZipButton,
+      runtime.elements.importFilesInput,
+      runtime.elements.importFolderInput,
+      runtime.elements.importZipInput,
+    ];
+    controls.forEach((control) => { control.disabled = Boolean(busy); });
+    runtime.elements.cancelImportButton.hidden = !busy;
+    runtime.elements.importDropZone.setAttribute("aria-disabled", String(Boolean(busy)));
+    runtime.elements.importDropZone.classList.toggle("disabled", Boolean(busy));
+  }
+
+  function updateImportProgress(detail) {
+    runtime.elements.importProgress.hidden = false;
+    runtime.elements.importProgressBar.value = Number.isFinite(detail.progress) ? detail.progress : 0;
+    runtime.elements.importProgressText.textContent = detail.message || "Convertendo exame…";
+    setStatus(detail.message || "Convertendo exame DICOM…");
+    if (detail.phase !== "complete") setLoading(detail.message || "Convertendo exame DICOM…");
+  }
+
+  async function importLocalFiles(files) {
+    const selected = Array.from(files || []);
+    if (!selected.length) return;
+    if (!global.DicomSlidesImporter) {
+      setLoading("O módulo de importação DICOM não foi carregado.", true);
+      return;
+    }
+
+    if (runtime.importAbortController) runtime.importAbortController.abort();
+    const controller = new AbortController();
+    runtime.importAbortController = controller;
+    setImportBusy(true);
+    runtime.elements.importProgress.hidden = false;
+    runtime.elements.importProgressBar.value = 0;
+    runtime.elements.importProgressText.textContent = "Preparando arquivos…";
+    setLoading("Preparando importação DICOM…");
+
+    try {
+      const result = await global.DicomSlidesImporter.importFiles(selected, {
+        chunkSize: 12,
+        persist: true,
+        signal: controller.signal,
+        onProgress: updateImportProgress,
+      });
+      const firstSeries = result.study.series[0];
+      const config = normalizeConfig({
+        sourceType: "local",
+        catalogId: "custom",
+        studyId: result.study.studyId,
+        studyUrl: global.DicomSlidesImporter.localStudyUrl(result.study.studyId),
+        series: firstSeries.id,
+        slice: Math.floor(Number(firstSeries.slices || 1) / 2),
+        mode: "stack",
+        preset: "default",
+        tool: "window",
+        center: null,
+        width: null,
+      });
+      runtime.config = config;
+      syncForm(config);
+      await renderViewer(config);
+      setSettingsOpen(false);
+      runtime.elements.importProgress.hidden = true;
+      const cacheText = result.persisted ? "guardado no cache local" : "disponível somente nesta sessão";
+      const warningText = result.warnings.length ? ` ${result.warnings.length} alerta(s) de revisão.` : "";
+      setStatus(`Importado: ${result.study.seriesCount} série(s), ${formatBytes(result.totalCompressedBytes)} comprimidos; ${cacheText}.${warningText}`);
+    } catch (error) {
+      if (error?.name === "AbortError") {
+        clearLoading();
+        setStatus("Importação cancelada.");
+        runtime.elements.importProgressText.textContent = "Importação cancelada.";
+      } else {
+        setLoading(error.message || String(error), true);
+        setStatus("Falha ao converter os arquivos DICOM.");
+        runtime.elements.importProgressText.textContent = error.message || String(error);
+      }
+    } finally {
+      setImportBusy(false);
+      if (runtime.importAbortController === controller) runtime.importAbortController = null;
+    }
+  }
+
+  function bindImportInput(input) {
+    input.addEventListener("change", () => {
+      const files = Array.from(input.files || []);
+      input.value = "";
+      importLocalFiles(files);
+    });
   }
 
   function bindUi() {
@@ -428,7 +600,7 @@
     runtime.elements.closeSettingsButton.addEventListener("click", () => setSettingsOpen(false));
     runtime.elements.catalogId.addEventListener("change", (event) => {
       applyCatalogDefaults(event.target.value);
-      syncCustomSourceVisibility();
+      syncSourceVisibility(runtime.config);
     });
     runtime.elements.restoreButton.addEventListener("click", () => {
       const catalogId = runtime.elements.catalogId.value === "custom"
@@ -449,6 +621,51 @@
         setLoading(error.message || String(error), true);
       }
     });
+
+    runtime.elements.importFilesButton.addEventListener("click", () => runtime.elements.importFilesInput.click());
+    runtime.elements.importFolderButton.addEventListener("click", () => runtime.elements.importFolderInput.click());
+    runtime.elements.importZipButton.addEventListener("click", () => runtime.elements.importZipInput.click());
+    bindImportInput(runtime.elements.importFilesInput);
+    bindImportInput(runtime.elements.importFolderInput);
+    bindImportInput(runtime.elements.importZipInput);
+    runtime.elements.cancelImportButton.addEventListener("click", () => runtime.importAbortController?.abort());
+
+    const dropZone = runtime.elements.importDropZone;
+    ["dragenter", "dragover"].forEach((type) => dropZone.addEventListener(type, (event) => {
+      event.preventDefault();
+      if (!runtime.importAbortController) dropZone.classList.add("drag-over");
+    }));
+    ["dragleave", "drop"].forEach((type) => dropZone.addEventListener(type, (event) => {
+      event.preventDefault();
+      dropZone.classList.remove("drag-over");
+    }));
+    dropZone.addEventListener("drop", (event) => {
+      if (!runtime.importAbortController) importLocalFiles(event.dataTransfer?.files || []);
+    });
+    dropZone.addEventListener("click", () => {
+      if (!runtime.importAbortController) runtime.elements.importFilesInput.click();
+    });
+    dropZone.addEventListener("keydown", (event) => {
+      if ((event.key === "Enter" || event.key === " ") && !runtime.importAbortController) {
+        event.preventDefault();
+        runtime.elements.importFilesInput.click();
+      }
+    });
+
+    runtime.elements.useRemoteSourceButton.addEventListener("click", () => {
+      runtime.config = remoteCustomConfig();
+      syncForm(runtime.config);
+      runtime.elements.studyId.focus();
+    });
+    runtime.elements.removeLocalSourceButton.addEventListener("click", async () => {
+      const studyId = runtime.config?.sourceType === "local" ? runtime.config.studyId : null;
+      if (studyId && global.DicomSlidesImporter) await global.DicomSlidesImporter.deletePackage(studyId);
+      runtime.config = normalizeConfig(defaultConfig(catalog[0]?.id));
+      syncForm(runtime.config);
+      await renderViewer(runtime.config);
+      setStatus("Pacote local removido; estudo de demonstração restaurado.");
+    });
+
     global.addEventListener("beforeunload", () => {
       global.clearTimeout(runtime.saveTimer);
       saveNow();
@@ -466,6 +683,10 @@
       settingsForm: byId("settingsForm"),
       catalogId: byId("catalogId"),
       customSource: byId("customSource"),
+      localSource: byId("localSource"),
+      localSourceSummary: byId("localSourceSummary"),
+      useRemoteSourceButton: byId("useRemoteSourceButton"),
+      removeLocalSourceButton: byId("removeLocalSourceButton"),
       studyId: byId("studyId"),
       studyUrl: byId("studyUrl"),
       series: byId("series"),
@@ -474,6 +695,17 @@
       preset: byId("preset"),
       tool: byId("tool"),
       restoreButton: byId("restoreButton"),
+      importFilesButton: byId("importFilesButton"),
+      importFolderButton: byId("importFolderButton"),
+      importZipButton: byId("importZipButton"),
+      importFilesInput: byId("importFilesInput"),
+      importFolderInput: byId("importFolderInput"),
+      importZipInput: byId("importZipInput"),
+      importDropZone: byId("importDropZone"),
+      importProgress: byId("importProgress"),
+      importProgressBar: byId("importProgressBar"),
+      importProgressText: byId("importProgressText"),
+      cancelImportButton: byId("cancelImportButton"),
       viewerMount: byId("viewerMount"),
       loadingPanel: byId("loadingPanel"),
       loadingText: byId("loadingText"),
@@ -486,6 +718,7 @@
 
     populateCatalog();
     bindUi();
+    if (global.DicomSlidesImporter?.ready) await global.DicomSlidesImporter.ready;
     runtime.config = normalizeConfig(loadLocalPreview() || defaultConfig(catalog[0]?.id));
     syncForm(runtime.config);
     await renderViewer(runtime.config, { persist: false });
@@ -511,10 +744,11 @@
   }
 
   global.DicomSlidesPowerPointAddin = Object.freeze({
-    version: "1.0.0",
+    version: "1.1.0",
     normalizeConfig,
     validateStudySource,
     renderViewer,
+    importLocalFiles,
     getState: () => serializeConfig(),
   });
 })(window);

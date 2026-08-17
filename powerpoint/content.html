@@ -36,16 +36,59 @@
         <div class="settings-heading">
           <div>
             <strong>Conteúdo do slide</strong>
-            <span>Escolha um estudo estático ou informe um pacote hospedado.</span>
+            <span>Importe DICOM diretamente ou escolha um pacote já convertido.</span>
           </div>
           <button class="icon-button" id="closeSettingsButton" type="button" aria-label="Fechar configuração">×</button>
         </div>
+
+        <section class="import-card" aria-labelledby="importHeading">
+          <div class="import-heading-row">
+            <div>
+              <strong id="importHeading">Importar exame DICOM</strong>
+              <span>A conversão ocorre localmente neste PowerPoint/WebView.</span>
+            </div>
+            <span class="local-pill">Local</span>
+          </div>
+          <div class="import-actions">
+            <button class="secondary-button" id="importFilesButton" type="button">Arquivos</button>
+            <button class="secondary-button" id="importFolderButton" type="button">Pasta</button>
+            <button class="secondary-button" id="importZipButton" type="button">ZIP</button>
+          </div>
+          <input id="importFilesInput" type="file" multiple hidden>
+          <input id="importFolderInput" type="file" multiple webkitdirectory directory hidden>
+          <input id="importZipInput" type="file" accept=".zip,application/zip,application/x-zip-compressed" hidden>
+          <div class="import-drop-zone" id="importDropZone" tabindex="0" role="button"
+               aria-label="Arraste arquivos DICOM ou um ZIP para importar">
+            Arraste arquivos DICOM ou um ZIP para esta área
+          </div>
+          <div class="import-progress" id="importProgress" hidden>
+            <progress id="importProgressBar" max="1" value="0"></progress>
+            <div>
+              <span id="importProgressText">Preparando importação…</span>
+              <button class="text-button" id="cancelImportButton" type="button">Cancelar</button>
+            </div>
+          </div>
+          <p class="import-note">Suporta séries single-frame não comprimidas: Implicit/Explicit VR Little Endian, Explicit VR Big Endian, mono 8/16-bit e RGB 8-bit.</p>
+        </section>
+
+        <div class="section-divider"><span>ou use um pacote existente</span></div>
 
         <form id="settingsForm" novalidate>
           <label class="field full-width">
             <span>Estudo</span>
             <select id="catalogId" name="catalogId"></select>
           </label>
+
+          <div class="local-source" id="localSource" hidden>
+            <div>
+              <strong>Exame importado neste dispositivo</strong>
+              <span id="localSourceSummary">O pacote convertido está no cache local.</span>
+            </div>
+            <div class="local-source-actions">
+              <button class="text-button" id="useRemoteSourceButton" type="button">Usar URL HTTPS</button>
+              <button class="text-button danger-text" id="removeLocalSourceButton" type="button">Remover cache</button>
+            </div>
+          </div>
 
           <div class="custom-source" id="customSource" hidden>
             <label class="field full-width">
@@ -99,8 +142,8 @@
           </div>
 
           <p class="security-note">
-            Carregue somente pacotes anonimizados e de uma origem confiável. Um <code>study.js</code>
-            personalizado executa JavaScript dentro do suplemento.
+            O importador não grava Patient Name, Patient ID, accession number nem instituição no pacote local,
+            mas não remove texto queimado nos pixels e não certifica anonimização. Revise o exame antes de compartilhar.
           </p>
 
           <div class="form-actions">
@@ -120,6 +163,7 @@
   <noscript>Este suplemento requer JavaScript.</noscript>
   <script src="../runtime/dicom-slide.js"></script>
   <script src="studies.js"></script>
+  <script src="dicom-importer.js"></script>
   <script src="content.js"></script>
 </body>
 </html>

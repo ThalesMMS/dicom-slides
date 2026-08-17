@@ -19,11 +19,11 @@ class PowerPointAddinTests(unittest.TestCase):
     def test_html_and_scripts(self) -> None:
         VALIDATOR.validate_html_and_scripts()
 
-    def test_readme_documents_sideloading(self) -> None:
-        text = (ROOT / "powerpoint" / "README.md").read_text(encoding="utf-8")
-        self.assertIn("manifest.xml", text)
-        self.assertIn("GitHub Pages", text)
-        self.assertIn("Office.context.document.settings", text)
+    def test_browser_dicom_importer_contract(self) -> None:
+        VALIDATOR.validate_importer()
+
+    def test_readme_documents_sideloading_and_local_storage(self) -> None:
+        VALIDATOR.validate_documentation()
 
 
 if __name__ == "__main__":
