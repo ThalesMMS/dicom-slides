@@ -6,6 +6,7 @@
     slicechange: "dicom-state-change",
     windowchange: "dicom-state-change",
     viewchange: "dicom-state-change",
+    toolchange: "dicom-state-change",
     modechange: "dicom-mode-change",
     volumeprogress: "dicom-volume-progress",
     expandrequest: "dicom-expand-request",

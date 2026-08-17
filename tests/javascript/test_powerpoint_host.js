@@ -48,11 +48,12 @@ function createShape(log, id = "content-app-1") {
   return shape;
 }
 
-function createPowerPoint(log, shapes) {
+function createPowerPoint(log, shapes, options = {}) {
   const slide = {
     id: "slide-1",
     shapes: {
       items: shapes,
+      load(properties) { log.push(["slideShapes.load", properties]); },
       getItem(id) {
         const shape = shapes.find((entry) => entry.id === id);
         if (!shape) throw new Error(`Missing shape ${id}`);
@@ -60,14 +61,18 @@ function createPowerPoint(log, shapes) {
       },
     },
   };
-  const collection = (items) => ({ items, load() {} });
+  const collection = (name, items) => ({
+    items,
+    load(properties) { log.push([`${name}.load`, properties]); },
+  });
   return {
     async run(callback) {
       log.push(["PowerPoint.run"]);
+      if (options.nativeError) throw options.nativeError;
       const context = {
         presentation: {
-          getSelectedShapes: () => collection(shapes),
-          getSelectedSlides: () => collection([slide]),
+          getSelectedShapes: () => collection("selectedShapes", shapes),
+          getSelectedSlides: () => collection("selectedSlides", [slide]),
           pageSetup: { slideWidth: 720, slideHeight: 405, load() {} },
           slides: { getItem: () => slide },
         },
@@ -78,7 +83,7 @@ function createPowerPoint(log, shapes) {
   };
 }
 
-function createHarness({ supported = true, shapes = null } = {}) {
+function createHarness({ supported = true, shapes = null, host = "PowerPoint", nativeError = null } = {}) {
   const log = [];
   const settings = createSettings(log);
   const contentShapes = shapes || [createShape(log)];
@@ -88,17 +93,19 @@ function createHarness({ supported = true, shapes = null } = {}) {
   const stateChanges = [];
   const statuses = [];
   const context = vm.createContext({
-    console,
+    console: { log: console.log, error: console.error, warn() {} },
     setImmediate,
     window: null,
     Office: {
       AsyncResultStatus: { Failed: "failed", Succeeded: "succeeded" },
+      HostType: { PowerPoint: "PowerPoint" },
       context: {
+        host,
         document: { settings },
         requirements: { isSetSupported: () => supported },
       },
     },
-    PowerPoint: createPowerPoint(log, contentShapes),
+    PowerPoint: createPowerPoint(log, contentShapes, { nativeError }),
   });
   context.window = context;
   context.globalThis = context;
@@ -135,6 +142,11 @@ async function testNativeExpandAndRestore() {
       < harness.log.findIndex(([name]) => name === "shape.left"),
     "original geometry must be persisted before the content app is resized",
   );
+  assert.ok(
+    harness.log.findIndex(([name]) => name === "context.sync")
+      < harness.log.findIndex(([name]) => name === "slideShapes.load"),
+    "the active slide must be resolved before its shapes are loaded",
+  );
 
   assert.equal(await harness.controller.setExpanded(false), false);
   assert.deepEqual(
@@ -150,13 +162,30 @@ async function testNativeExpandAndRestore() {
   );
 }
 
-async function testUnsupportedHostFallsBackInsideTheAddin() {
+async function testUnsupportedPowerPointDoesNotPretendToFillTheSlide() {
   const harness = createHarness({ supported: false });
 
-  assert.equal(await harness.controller.setExpanded(true), true);
+  assert.equal(await harness.controller.setExpanded(true), false);
   await flush();
   assert.equal(harness.log.some(([name]) => name === "PowerPoint.run"), false);
-  assert.deepEqual(harness.log.filter(([name]) => name === "viewer.setExpanded"), [["viewer.setExpanded", true]]);
+  assert.deepEqual(harness.log.filter(([name]) => name === "viewer.setExpanded"), [["viewer.setExpanded", false]]);
+  assert.equal(harness.settings.stored[frameKey], undefined);
+  assert.match(harness.statuses.at(-1), /requires PowerPoint 16\.105/i);
+}
+
+async function testNativeFailureIsReportedWithoutFakeFullscreen() {
+  const harness = createHarness({ nativeError: new Error("native resize rejected") });
+
+  assert.equal(await harness.controller.setExpanded(true), false);
+  assert.equal(harness.settings.stored[frameKey], undefined);
+  assert.deepEqual(harness.stateChanges, [false]);
+  assert.match(harness.statuses.at(-1), /native resize rejected/i);
+}
+
+async function testBrowserPreviewCanStillExpandInsideItsFrame() {
+  const harness = createHarness({ supported: false, host: null });
+
+  assert.equal(await harness.controller.setExpanded(true), true);
   assert.equal(harness.settings.stored[frameKey].native, false);
   assert.match(harness.statuses.at(-1), /current add-in frame/i);
 
@@ -164,23 +193,25 @@ async function testUnsupportedHostFallsBackInsideTheAddin() {
   assert.match(harness.statuses.at(-1), /viewer size restored/i);
 }
 
-async function testAmbiguousContentAppsUseSafeFallback() {
+async function testAmbiguousContentAppsReportFailure() {
   const log = [];
   const first = createShape(log, "content-app-1");
   const second = createShape(log, "content-app-2");
   const harness = createHarness({ shapes: [first, second] });
 
-  assert.equal(await harness.controller.setExpanded(true), true);
+  assert.equal(await harness.controller.setExpanded(true), false);
   assert.deepEqual({ left: first.left, top: first.top }, { left: 48, top: 36 });
   assert.deepEqual({ left: second.left, top: second.top }, { left: 48, top: 36 });
-  assert.equal(harness.settings.stored[frameKey].native, false);
-  assert.match(harness.statuses.at(-1), /current add-in frame/i);
+  assert.equal(harness.settings.stored[frameKey], undefined);
+  assert.match(harness.statuses.at(-1), /identify one content add-in/i);
 }
 
 (async () => {
   await testNativeExpandAndRestore();
-  await testUnsupportedHostFallsBackInsideTheAddin();
-  await testAmbiguousContentAppsUseSafeFallback();
+  await testUnsupportedPowerPointDoesNotPretendToFillTheSlide();
+  await testNativeFailureIsReportedWithoutFakeFullscreen();
+  await testBrowserPreviewCanStillExpandInsideItsFrame();
+  await testAmbiguousContentAppsReportFailure();
   console.log("PowerPoint host expansion tests passed.");
 })().catch((error) => {
   console.error(error);

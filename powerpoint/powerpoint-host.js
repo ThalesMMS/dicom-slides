@@ -49,27 +49,39 @@
     }
   }
 
+  function isPowerPointHost() {
+    const host = global.Office?.context?.host;
+    const powerPoint = global.Office?.HostType?.PowerPoint || "PowerPoint";
+    return host === powerPoint || String(host || "").toLowerCase() === "powerpoint";
+  }
+
   async function resolveSelectedContentApp(context) {
     const presentation = context.presentation;
-    const selectedShapes = presentation.getSelectedShapes();
     const selectedSlides = presentation.getSelectedSlides();
+    selectedSlides.load("items/id");
+    await context.sync();
+
+    if (selectedSlides.items.length !== 1) {
+      throw new Error("PowerPoint could not identify the active slide.");
+    }
+
+    const slide = selectedSlides.items[0];
+    const selectedShapes = presentation.getSelectedShapes();
     const pageSetup = presentation.pageSetup;
     selectedShapes.load("items/id,items/type,items/left,items/top,items/width,items/height");
-    selectedSlides.load("items/id,items/shapes/items/id,items/shapes/items/type,items/shapes/items/left,items/shapes/items/top,items/shapes/items/width,items/shapes/items/height");
+    slide.shapes.load("items/id,items/type,items/left,items/top,items/width,items/height");
     pageSetup.load("slideWidth,slideHeight");
     await context.sync();
 
     let candidates = selectedShapes.items.filter(isContentApp);
     if (candidates.length !== 1) {
-      candidates = selectedSlides.items.flatMap((slide) => slide.shapes.items.filter(isContentApp));
+      candidates = slide.shapes.items.filter(isContentApp);
     }
     if (candidates.length !== 1) {
       throw new Error("PowerPoint could not identify one content add-in on the selected slide.");
     }
 
     const shape = candidates[0];
-    const slide = selectedSlides.items.find((entry) => entry.shapes.items.some((item) => item.id === shape.id));
-    if (!slide) throw new Error("PowerPoint could not identify the slide containing this add-in.");
     return { pageSetup, shape, slide };
   }
 
@@ -133,16 +145,30 @@
       return applyExpandedState(true);
     }
 
+    async function reportNativeFailure(message, error = null) {
+      await writeFrameRecord(null).catch(() => {});
+      if (error) global.console?.warn?.("DICOM Slides could not resize its PowerPoint content add-in.", error);
+      onStatus(message);
+      return applyExpandedState(false);
+    }
+
     async function setExpanded(value) {
       const requested = Boolean(value);
       const record = readFrameRecord();
       if (requested) {
-        if (!supportsNativeExpansion()) return useInternalFallback();
+        if (!supportsNativeExpansion()) {
+          if (!isPowerPointHost()) return useInternalFallback();
+          return reportNativeFailure("Slide fullscreen requires PowerPoint 16.105 or later.");
+        }
         try {
           await expandNative();
           return applyExpandedState(true);
-        } catch (_) {
-          return useInternalFallback();
+        } catch (error) {
+          if (!isPowerPointHost()) return useInternalFallback();
+          return reportNativeFailure(
+            `Could not expand the add-in to fill the slide: ${error?.message || String(error)}`,
+            error,
+          );
         }
       }
 

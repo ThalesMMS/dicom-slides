@@ -57,6 +57,12 @@ class PowerPointAddinTests(unittest.TestCase):
         self.assertNotIn('class="brand-block"', html)
         self.assertNotIn('class="state-badges"', html)
 
+    def test_powerpoint_status_does_not_consume_a_visible_row(self) -> None:
+        html = (ROOT / "powerpoint" / "content.html").read_text(encoding="utf-8")
+        self.assertNotIn('<footer', html)
+        self.assertNotIn('class="brandbar"', html)
+        self.assertIn('id="statusText" class="visually-hidden"', html)
+
     def test_browser_dicom_importer_contract(self) -> None:
         VALIDATOR.validate_importer()
 
