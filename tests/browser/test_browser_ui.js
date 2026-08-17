@@ -91,7 +91,7 @@ const baseUrl = process.env.DICOM_SLIDE_BASE_URL || "http://127.0.0.1:8765";
     await page.waitForFunction(() => window.adapterMessages.some((message) =>
       message.type === "error" && message.state && message.state.message === "adapter command failed"));
 
-    await page.goto(`${baseUrl}/presentation/index.html#5`, { waitUntil: "load" });
+    await page.goto(`${baseUrl}/presentation/index.html#2`, { waitUntil: "load" });
     const activeSlideFrame = page.locator('.deck-slide.active iframe');
     await activeSlideFrame.waitFor({ timeout: 3000 });
     assert.match(await activeSlideFrame.getAttribute("src"), /slides\/02-visible-human\/index\.html$/);
@@ -154,6 +154,9 @@ const baseUrl = process.env.DICOM_SLIDE_BASE_URL || "http://127.0.0.1:8765";
 
     await page.locator('button[data-view-mode="volume"]').click();
     await page.waitForFunction(() => window.viewer.viewer.volumeView && window.viewer.viewer.getState().mode === "volume");
+    const initialTransferState = await page.evaluate(() => window.viewer.viewer.volumeView.getState());
+    assert.equal(initialTransferState.transferFunctionId, "angio", "3D must open with Angio selected");
+    assert.equal(await page.locator('[data-volume-control="transfer-function"]').inputValue(), "angio");
     const volumeTools = await page.locator('[data-volume-panel="volume"] [data-volume-tool]').allTextContents();
     assert.deepEqual(volumeTools.map((label) => label.trim()), ["W/L", "Pan", "Zoom", "Rotate"]);
     const transferLabels = await page.locator('[data-volume-control="transfer-function"] option').allTextContents();

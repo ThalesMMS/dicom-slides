@@ -32,8 +32,9 @@ strong{color:var(--text)}
 .hero-copy{align-self:center}.hero-copy p{max-width:900px}
 .hero-poster{position:relative;align-self:stretch;min-height:0;border:1px solid var(--line);border-radius:24px;overflow:hidden;background:#000;box-shadow:0 30px 80px rgba(0,0,0,.4)}
 .hero-poster img{width:100%;height:100%;object-fit:contain;display:block}
-.hero-poster::after{content:"Visible Human · study 1 · axial CT in HU";position:absolute;left:18px;right:18px;bottom:18px;padding:10px 12px;border:1px solid rgba(255,255,255,.15);border-radius:10px;background:rgba(5,8,12,.78);backdrop-filter:blur(12px);font-size:13px;color:#dbe8f1;text-align:center}
+.hero-poster::after{content:"Visible Human · study 1 · 3D CT reconstruction";position:absolute;left:18px;right:18px;bottom:18px;padding:10px 12px;border:1px solid rgba(255,255,255,.15);border-radius:10px;background:rgba(5,8,12,.78);backdrop-filter:blur(12px);font-size:13px;color:#dbe8f1;text-align:center}
 .hero-help{margin-top:28px!important;max-width:850px}
+.hero-project-link{position:absolute;left:clamp(34px,6vw,100px);bottom:60px;margin:0}
 .pill-row{display:flex;flex-wrap:wrap;gap:10px;margin-top:24px}.pill{padding:8px 11px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:#cad7e1;font-size:13px;font-weight:700}
 .demo-layout{display:grid;grid-template-columns:minmax(320px,.82fr) minmax(520px,1.18fr);gap:28px;flex:1;min-height:0;align-items:stretch}
 .demo-copy{min-height:0;overflow:auto;padding-right:4px}.demo-copy p{font-size:16px}.demo-copy ul{margin:12px 0 22px;padding-left:20px;color:#b6c5d1;line-height:1.55}.demo-copy li+li{margin-top:7px}
@@ -69,7 +70,7 @@ strong{color:var(--text)}
 .guide-footnote{margin:18px 0 0;font-size:clamp(13px,1.1vw,16px);color:#8193a1}
 .slide-link{color:#7dd3fc;text-decoration-color:rgba(125,211,252,.45);text-underline-offset:3px;overflow-wrap:anywhere}
 .agent-prompt{flex:1;min-height:0;margin:0;padding:clamp(18px,2.3vw,30px);overflow:auto;border:1px solid #334252;border-radius:16px;background:#080c11;color:#d8e8f2;font:500 clamp(14px,1.18vw,18px)/1.48 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;white-space:pre-wrap}
-.review-steps{grid-template-columns:1fr 1fr;gap:0 32px}
+.review-steps{grid-template-columns:1fr;gap:0}
 .review-warning{margin-bottom:0}
 .reference-list{display:grid;gap:0;min-height:0}
 .reference-entry{padding:clamp(12px,1.8vh,20px) 0;border-top:1px solid var(--line)}

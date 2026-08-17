@@ -35,11 +35,11 @@ assert.deepEqual(
   catalog.map((slide) => slide.id),
   [
     "01-introduction",
+    "02-visible-human",
+    "03-mri-dir",
     "01a-ai-setup",
     "01b-ai-prompt",
     "01c-ai-review",
-    "02-visible-human",
-    "03-mri-dir",
     "04-references",
   ],
   "presentation must publish the approved seven-slide narrative"

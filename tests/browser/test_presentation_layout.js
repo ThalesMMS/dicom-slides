@@ -7,11 +7,11 @@ const { chromium } = require("playwright");
 const baseUrl = process.env.DICOM_SLIDE_BASE_URL || "http://127.0.0.1:8765";
 const slideIds = [
   "01-introduction",
+  "02-visible-human",
+  "03-mri-dir",
   "01a-ai-setup",
   "01b-ai-prompt",
   "01c-ai-review",
-  "02-visible-human",
-  "03-mri-dir",
   "04-references",
 ];
 
@@ -37,10 +37,38 @@ const slideIds = [
           clientWidth: document.documentElement.clientWidth,
           scrollHeight: document.documentElement.scrollHeight,
           clientHeight: document.documentElement.clientHeight,
+          studyCard: document.querySelector(".study-card")
+            ? {
+                scrollHeight: document.querySelector(".study-card").scrollHeight,
+                clientHeight: document.querySelector(".study-card").clientHeight,
+              }
+            : null,
+          reviewItems: Array.from(document.querySelectorAll(".review-steps li"), (item) => {
+            const rect = item.getBoundingClientRect();
+            return { top: rect.top, bottom: rect.bottom, left: rect.left, right: rect.right };
+          }),
         }));
         assert.equal(layout.language, "en", `${slideIds[index]} must declare English`);
         assert.ok(layout.scrollWidth <= layout.clientWidth + 1, `${slideIds[index]} overflows horizontally`);
         assert.ok(layout.scrollHeight <= layout.clientHeight + 1, `${slideIds[index]} overflows vertically`);
+        if (viewport.width > 980 && layout.studyCard) {
+          assert.ok(
+            layout.studyCard.scrollHeight <= layout.studyCard.clientHeight + 1,
+            `${slideIds[index]} study card requires internal scrolling on a desktop viewport`
+          );
+        }
+        if (slideIds[index] === "01c-ai-review") {
+          assert.equal(layout.reviewItems.length, 3, "Review slide must contain exactly three checklist items");
+          const [first, second, third] = layout.reviewItems;
+          assert.ok(second.top >= first.bottom - 1, "Second review item must sit below the first");
+          assert.ok(third.top >= second.bottom - 1, "Third review item must sit below the second");
+          assert.ok(
+            [second, third].every((item) =>
+              Math.abs(item.left - first.left) <= 1 && Math.abs(item.right - first.right) <= 1
+            ),
+            "All review items must use the same single-column width"
+          );
+        }
       }
       assert.deepEqual(pageErrors, []);
       await page.close();

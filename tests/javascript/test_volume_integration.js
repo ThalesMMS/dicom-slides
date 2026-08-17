@@ -195,8 +195,7 @@ assert.deepEqual(
   JSON.parse(JSON.stringify(api.TRANSFER_FUNCTIONS.map((preset) => preset.id))),
   ["angio", "airways", "bones-skin-1", "bones-skin-2", "bones-skin-3", "bones-bw", "skin-bw"]
 );
-assert.equal(api.DEFAULT_TRANSFER_FUNCTION_ID, "bones-skin-1");
-assert.equal(api.getTransferFunction("missing").id, "bones-skin-1");
+assert.equal(api.getTransferFunction("missing").id, "angio", "Unknown presets must fall back to Angio");
 
 // Stops remain in modality units (HU), not normalized 0..1, and interpolation
 // continues clamping out-of-range values at the endpoints.

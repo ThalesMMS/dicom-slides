@@ -134,7 +134,7 @@
     },
   ]);
 
-  const DEFAULT_TRANSFER_FUNCTION_ID = "bones-skin-1";
+  const DEFAULT_TRANSFER_FUNCTION_ID = "angio";
   const PACKED_TRANSFER_CACHE = new Map();
   const MAX_PACKED_TRANSFER_CACHE_ENTRIES = 64;
 

@@ -16,9 +16,7 @@ const root = path.resolve(__dirname, "..", "..");
     page.on("pageerror", (error) => pageErrors.push(error.message));
     await page.goto(pathToFileURL(path.join(root, "index.html")).href, { waitUntil: "load" });
     await page.waitForURL(/presentation\/index\.html$/);
-    for (let index = 0; index < 4; index += 1) {
-      await page.locator("#next-slide").click();
-    }
+    await page.locator("#next-slide").click();
     const frameElement = page.locator('.deck-slide.active iframe');
     await frameElement.waitFor();
     assert.match(await frameElement.getAttribute("src"), /slides\/02-visible-human\/index\.html$/);
