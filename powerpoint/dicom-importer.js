@@ -21,6 +21,11 @@
 
   const LONG_VR = new Set(["OB", "OD", "OF", "OL", "OW", "SQ", "UC", "UR", "UT", "UN", "OV", "SV", "UV"]);
   const TEXT_VR = new Set(["AE", "AS", "CS", "DA", "DS", "DT", "IS", "LO", "LT", "PN", "SH", "ST", "TM", "UC", "UI", "UR", "UT", "UN"]);
+  const VALID_VR = new Set([
+    "AE", "AS", "AT", "CS", "DA", "DS", "DT", "FD", "FL", "IS", "LO", "LT", "OB", "OD", "OF", "OL",
+    "OV", "OW", "PN", "SH", "SL", "SQ", "SS", "ST", "SV", "TM", "UC", "UI", "UL", "UN", "UR", "US",
+    "UT", "UV",
+  ]);
 
   const TARGETS = Object.freeze({
     "00020010": "transferSyntaxUID",
@@ -219,14 +224,18 @@
   function parseDicomBuffer(input, sourceName = "DICOM", requirePixels = false) {
     const bytes = input instanceof Uint8Array ? input : new Uint8Array(input);
     const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-    let offset = bytes.length >= 132 && bytes[128] === 0x44 && bytes[129] === 0x49
-      && bytes[130] === 0x43 && bytes[131] === 0x4d ? 132 : 0;
-    let explicit = true;
+    const hasPreamble = bytes.length >= 132 && bytes[128] === 0x44 && bytes[129] === 0x49
+      && bytes[130] === 0x43 && bytes[131] === 0x4d;
+    let offset = hasPreamble ? 132 : 0;
+    const probedVr = bytes.length >= offset + 6
+      ? String.fromCharCode(bytes[offset + 4], bytes[offset + 5])
+      : "";
+    let explicit = hasPreamble || VALID_VR.has(probedVr);
     let littleEndian = true;
-    let transferSyntax = EXPLICIT_VR_LITTLE_ENDIAN;
+    let transferSyntax = explicit ? EXPLICIT_VR_LITTLE_ENDIAN : IMPLICIT_VR_LITTLE_ENDIAN;
     let decoder = textDecoderFor("");
-    let inFileMeta = true;
-    const meta = { sourceName };
+    let inFileMeta = hasPreamble;
+    const meta = { sourceName, transferSyntaxUID: transferSyntax };
 
     while (offset + 8 <= bytes.length) {
       let group;
@@ -378,7 +387,7 @@
   }
 
   async function readMonochromePixels(record) {
-    const bytes = await readSourceBytes(record.source);
+    const bytes = record.sourceBytes || await readSourceBytes(record.source);
     const bits = Number(record.bitsAllocated);
     const expectedPixels = Number(record.rows) * Number(record.columns);
     const expectedBytes = expectedPixels * (bits / 8);
@@ -391,6 +400,14 @@
     const sourceLittleEndian = transferSyntax !== EXPLICIT_VR_BIG_ENDIAN;
     const signed = Number(record.pixelRepresentation || 0) === 1;
     const bitsStored = Number(record.bitsStored || bits);
+    const highBit = Number(record.highBit ?? (bits - 1));
+    if (!Number.isInteger(bitsStored) || bitsStored < 1 || bitsStored > bits) {
+      throw new Error(`Invalid Bits Stored ${record.bitsStored}; expected 1-${bits}.`);
+    }
+    if (!Number.isInteger(highBit) || highBit < bitsStored - 1 || highBit >= bits) {
+      throw new Error(`Invalid High Bit ${record.highBit}; expected ${bitsStored - 1}-${bits - 1}.`);
+    }
+    const rightShift = highBit + 1 - bitsStored;
     const mask = bitsStored >= 32 ? 0xffffffff : (2 ** bitsStored) - 1;
     const signBit = 2 ** (bitsStored - 1);
     const slope = firstNumber(record.rescaleSlope, 1);
@@ -400,16 +417,19 @@
 
     for (let index = 0; index < expectedPixels; index += 1) {
       let raw = bits === 16 ? view.getUint16(index * 2, sourceLittleEndian) : view.getUint8(index);
-      raw &= mask;
+      raw = (raw >>> rightShift) & mask;
       if (signed && raw >= signBit) raw -= 2 ** bitsStored;
       const scaled = Math.round(raw * slope + intercept);
-      output[index] = Math.max(-32768, Math.min(32767, scaled));
+      if (!Number.isFinite(scaled) || scaled < -32768 || scaled > 32767) {
+        throw new Error(`Pixel value ${scaled} is outside the signed 16-bit range after rescale.`);
+      }
+      output[index] = scaled;
     }
     return output;
   }
 
   async function readRgbPixels(record) {
-    const bytes = await readSourceBytes(record.source);
+    const bytes = record.sourceBytes || await readSourceBytes(record.source);
     const expectedPixels = Number(record.rows) * Number(record.columns);
     const expectedBytes = expectedPixels * 3;
     const start = Number(record.pixelOffset);
@@ -656,6 +676,9 @@
       const method = view.getUint16(offset + 10, true);
       const compressedSize = view.getUint32(offset + 20, true);
       const uncompressedSize = view.getUint32(offset + 24, true);
+      if (compressedSize === 0xffffffff || uncompressedSize === 0xffffffff) {
+        throw new Error("ZIP64 is not supported by the PowerPoint importer yet.");
+      }
       const nameLength = view.getUint16(offset + 28, true);
       const extraLength = view.getUint16(offset + 30, true);
       const commentLength = view.getUint16(offset + 32, true);
@@ -735,6 +758,7 @@
         const bytes = await readSourceBytes(source);
         const meta = parseDicomBuffer(bytes, source.name, false);
         meta.source = source;
+        meta.sourceBytes = bytes;
         headers.push(meta);
       } catch (error) {
         scanErrors.push(`${source.name}: ${error.message}`);

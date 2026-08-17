@@ -68,7 +68,17 @@ function usElement(group, item, value) {
   return element(group, item, "US", u16(value));
 }
 
-function makeDicom({ instance = 1, z = 0, studyUid = "1.2.3.4.5", seriesUid = "1.2.3.4.5.6" } = {}) {
+function makeDicom({
+  instance = 1,
+  z = 0,
+  studyUid = "1.2.3.4.5",
+  seriesUid = "1.2.3.4.5.6",
+  bitsStored = 16,
+  highBit = 15,
+  pixelValues = [1024, 1025, 1026, 1027],
+  rescaleIntercept = -1024,
+  includeFileMeta = true,
+} = {}) {
   const preamble = new Uint8Array(132);
   preamble.set(new TextEncoder().encode("DICM"), 128);
   const meta = [
@@ -76,7 +86,7 @@ function makeDicom({ instance = 1, z = 0, studyUid = "1.2.3.4.5", seriesUid = "1
   ];
   const pixels = new Uint8Array(8);
   const pixelView = new DataView(pixels.buffer);
-  [1024, 1025, 1026, 1027].forEach((value, index) => pixelView.setUint16(index * 2, value, true));
+  pixelValues.forEach((value, index) => pixelView.setUint16(index * 2, value, true));
   const dataset = [
     element(0x0008, 0x0060, "CS", textPayload("CT", "CS")),
     element(0x0008, 0x0080, "LO", textPayload("Hospital Example", "LO")),
@@ -96,16 +106,16 @@ function makeDicom({ instance = 1, z = 0, studyUid = "1.2.3.4.5", seriesUid = "1
     usElement(0x0028, 0x0011, 2),
     element(0x0028, 0x0030, "DS", textPayload("1\\1", "DS")),
     usElement(0x0028, 0x0100, 16),
-    usElement(0x0028, 0x0101, 16),
-    usElement(0x0028, 0x0102, 15),
+    usElement(0x0028, 0x0101, bitsStored),
+    usElement(0x0028, 0x0102, highBit),
     usElement(0x0028, 0x0103, 0),
     element(0x0028, 0x1050, "DS", textPayload("40", "DS")),
     element(0x0028, 0x1051, "DS", textPayload("400", "DS")),
-    element(0x0028, 0x1052, "DS", textPayload("-1024", "DS")),
+    element(0x0028, 0x1052, "DS", textPayload(String(rescaleIntercept), "DS")),
     element(0x0028, 0x1053, "DS", textPayload("1", "DS")),
     element(0x7fe0, 0x0010, "OW", pixels),
   ];
-  return concat([preamble, ...meta, ...dataset]);
+  return includeFileMeta ? concat([preamble, ...meta, ...dataset]) : concat(dataset);
 }
 
 function implicitElement(group, item, payload) {
@@ -113,15 +123,13 @@ function implicitElement(group, item, payload) {
   return concat([u16(group), u16(item), u32(payload.length), payload]);
 }
 
-function makeImplicitDicom() {
+function makeImplicitDicom({ includeFileMeta = true } = {}) {
   const preamble = new Uint8Array(132);
   preamble.set(new TextEncoder().encode("DICM"), 128);
   const pixels = new Uint8Array(8);
   const pixelView = new DataView(pixels.buffer);
   [10, 20, 30, 40].forEach((value, index) => pixelView.setUint16(index * 2, value, true));
-  return concat([
-    preamble,
-    element(0x0002, 0x0010, "UI", textPayload("1.2.840.10008.1.2", "UI")),
+  const dataset = [
     implicitElement(0x0008, 0x0060, textPayload("CT", "CS")),
     implicitElement(0x0008, 0x1030, textPayload("Implicit Study", "LO")),
     implicitElement(0x0008, 0x103e, textPayload("Implicit Series", "LO")),
@@ -143,7 +151,10 @@ function makeImplicitDicom() {
     implicitElement(0x0028, 0x1052, textPayload("-10", "DS")),
     implicitElement(0x0028, 0x1053, textPayload("2", "DS")),
     implicitElement(0x7fe0, 0x0010, pixels),
-  ]);
+  ];
+  return includeFileMeta
+    ? concat([preamble, element(0x0002, 0x0010, "UI", textPayload("1.2.840.10008.1.2", "UI")), ...dataset])
+    : concat(dataset);
 }
 
 function usElementEndian(group, item, value, little) {
@@ -214,7 +225,9 @@ function fileLike(name, bytes, type = "application/dicom") {
     name,
     type,
     size: bytes.length,
+    arrayBufferCalls: 0,
     async arrayBuffer() {
+      this.arrayBufferCalls += 1;
       return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
     },
   };
@@ -320,6 +333,43 @@ async function main() {
   const implicitView = new DataView(implicitRaw.buffer, implicitRaw.byteOffset, implicitRaw.byteLength);
   assert.deepEqual([10, 30, 50, 70], [0, 1, 2, 3].map((index) => implicitView.getInt16(index * 2, true)));
 
+  const implicitWithoutMeta = makeImplicitDicom({ includeFileMeta: false });
+  const parsedImplicitWithoutMeta = importer.testing.parseDicomBuffer(implicitWithoutMeta, "implicit-no-meta.dcm", true);
+  assert.equal(parsedImplicitWithoutMeta.transferSyntaxUID, "1.2.840.10008.1.2");
+  assert.equal(parsedImplicitWithoutMeta.rows, 2);
+  assert.equal(parsedImplicitWithoutMeta.columns, 2);
+
+  const shiftedBitsResult = await importer.importFiles([
+    fileLike("shifted-bits.dcm", makeDicom({
+      bitsStored: 12,
+      highBit: 14,
+      pixelValues: [8, 16, 24, 32],
+      rescaleIntercept: 0,
+    })),
+  ], { chunkSize: 1, persist: false });
+  const shiftedSeries = shiftedBitsResult.study.series[0];
+  const shiftedRaw = await gunzipBase64(chunks.get(`${shiftedSeries.caseId}:0`));
+  const shiftedView = new DataView(shiftedRaw.buffer, shiftedRaw.byteOffset, shiftedRaw.byteLength);
+  assert.deepEqual([1, 2, 3, 4], [0, 1, 2, 3].map((index) => shiftedView.getInt16(index * 2, true)));
+
+  await assert.rejects(
+    importer.importFiles([
+      fileLike("invalid-high-bit.dcm", makeDicom({ bitsStored: 12, highBit: 10, rescaleIntercept: 0 })),
+    ], { chunkSize: 1, persist: false }),
+    /High Bit/i,
+  );
+
+  await assert.rejects(
+    importer.importFiles([
+      fileLike("int16-overflow.dcm", makeDicom({ pixelValues: [65535, 0, 1, 2], rescaleIntercept: 0 })),
+    ], { chunkSize: 1, persist: false }),
+    /signed 16-bit range/i,
+  );
+
+  const readOnceFile = fileLike("read-once.dcm", makeDicom({ rescaleIntercept: 0 }));
+  await importer.importFiles([readOnceFile], { chunkSize: 1, persist: false });
+  assert.equal(readOnceFile.arrayBufferCalls, 1, "a converted source must be read only once");
+
   const bigResult = await importer.importFiles([
     fileLike("big-endian.dcm", makeBigEndianDicom()),
   ], { chunkSize: 1, persist: false });
@@ -345,6 +395,18 @@ async function main() {
   assert.equal(zipSources.length, 2);
   assert.deepEqual(await zipSources[0].read(), first);
   assert.deepEqual(await zipSources[1].read(), second);
+
+  for (const sizeOffset of [20, 24]) {
+    const zip64Entry = makeZip([{ name: "slice.dcm", data: first, method: 0 }]);
+    const zip64View = new DataView(zip64Entry.buffer, zip64Entry.byteOffset, zip64Entry.byteLength);
+    const eocdOffset = zip64Entry.length - 22;
+    const centralOffset = zip64View.getUint32(eocdOffset + 16, true);
+    zip64View.setUint32(centralOffset + sizeOffset, 0xffffffff, true);
+    await assert.rejects(
+      importer.testing.zipSourcesFromFile(fileLike("zip64-entry.zip", zip64Entry, "application/zip")),
+      /ZIP64 is not supported/,
+    );
+  }
 
   await assert.rejects(
     importer.importFiles([

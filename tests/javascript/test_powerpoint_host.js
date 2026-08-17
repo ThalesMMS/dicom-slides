@@ -11,6 +11,7 @@ const hostPath = path.join(root, "powerpoint", "powerpoint-host.js");
 assert.ok(fs.existsSync(hostPath), "PowerPoint host expansion module must exist");
 const source = fs.readFileSync(hostPath, "utf8");
 const frameKey = "dicomSlides.powerPoint.frame.v1";
+const frameTargetKey = "dicomSlides.powerPoint.frameTarget.v1";
 
 function flush() {
   return new Promise((resolve) => setImmediate(resolve));
@@ -34,7 +35,11 @@ function createSettings(log) {
 
 function createShape(log, id = "content-app-1") {
   const values = { left: 48, top: 36, width: 624, height: 351 };
-  const shape = { id, type: "ContentApp" };
+  const shape = {
+    id,
+    type: "ContentApp",
+    load(properties) { log.push(["shape.load", properties]); },
+  };
   for (const property of ["left", "top", "width", "height"]) {
     Object.defineProperty(shape, property, {
       enumerable: true,
@@ -72,7 +77,10 @@ function createPowerPoint(log, shapes, options = {}) {
       const context = {
         presentation: {
           getSelectedShapes: () => collection("selectedShapes", shapes),
-          getSelectedSlides: () => collection("selectedSlides", [slide]),
+          getSelectedSlides: () => collection(
+            "selectedSlides",
+            options.getActiveView?.() === "read" ? [] : [slide],
+          ),
           pageSetup: { slideWidth: 720, slideHeight: 405, load() {} },
           slides: { getItem: () => slide },
         },
@@ -83,9 +91,16 @@ function createPowerPoint(log, shapes, options = {}) {
   };
 }
 
-function createHarness({ supported = true, shapes = null, host = "PowerPoint", nativeError = null } = {}) {
+function createHarness({
+  supported = true,
+  shapes = null,
+  host = "PowerPoint",
+  nativeError = null,
+  activeView = "edit",
+} = {}) {
   const log = [];
   const settings = createSettings(log);
+  let currentActiveView = activeView;
   const contentShapes = shapes || [createShape(log)];
   const viewer = {
     async setExpanded(value) { log.push(["viewer.setExpanded", Boolean(value)]); },
@@ -105,17 +120,29 @@ function createHarness({ supported = true, shapes = null, host = "PowerPoint", n
         requirements: { isSetSupported: () => supported },
       },
     },
-    PowerPoint: createPowerPoint(log, contentShapes, { nativeError }),
+    PowerPoint: createPowerPoint(log, contentShapes, {
+      nativeError,
+      getActiveView: () => currentActiveView,
+    }),
   });
   context.window = context;
   context.globalThis = context;
   vm.runInContext(source, context, { filename: "powerpoint/powerpoint-host.js" });
   const controller = context.DicomSlidesPowerPointHost.createExpansionController({
     getViewer: () => viewer,
+    getActiveView: () => currentActiveView,
     onExpandedChange: (value) => stateChanges.push(Boolean(value)),
     onStatus: (message) => statuses.push(message),
   });
-  return { contentShapes, controller, log, settings, stateChanges, statuses };
+  return {
+    contentShapes,
+    controller,
+    log,
+    settings,
+    stateChanges,
+    statuses,
+    setActiveView(value) { currentActiveView = value; },
+  };
 }
 
 async function testNativeExpandAndRestore() {
@@ -136,6 +163,10 @@ async function testNativeExpandAndRestore() {
     top: 36,
     width: 624,
     height: 351,
+  });
+  assert.deepEqual(JSON.parse(JSON.stringify(harness.settings.stored[frameTargetKey])), {
+    slideId: "slide-1",
+    shapeId: "content-app-1",
   });
   assert.ok(
     harness.log.findIndex(([name]) => name === "settings.save")
@@ -182,6 +213,43 @@ async function testNativeFailureIsReportedWithoutFakeFullscreen() {
   assert.match(harness.statuses.at(-1), /native resize rejected/i);
 }
 
+async function testSlideShowExpandsThePreparedContentAppWithoutASelection() {
+  const harness = createHarness();
+  const shape = harness.contentShapes[0];
+
+  assert.equal(await harness.controller.prepare(), true);
+  assert.deepEqual(JSON.parse(JSON.stringify(harness.settings.stored[frameTargetKey])), {
+    slideId: "slide-1",
+    shapeId: "content-app-1",
+  });
+
+  harness.setActiveView("read");
+  const expansionLogStart = harness.log.length;
+  assert.equal(await harness.controller.setExpanded(true), true);
+  const expansionLog = harness.log.slice(expansionLogStart);
+
+  assert.equal(expansionLog.some(([name]) => name === "selectedSlides.load"), false);
+  assert.deepEqual(
+    { left: shape.left, top: shape.top, width: shape.width, height: shape.height },
+    { left: 0, top: 0, width: 720, height: 405 },
+  );
+}
+
+async function testPreparingTheSlideTargetIsBestEffort() {
+  const harness = createHarness({ nativeError: new Error("selection unavailable") });
+
+  assert.equal(await harness.controller.prepare(), false);
+  assert.equal(harness.settings.stored[frameTargetKey], undefined);
+}
+
+async function testUnpreparedSlideShowDoesNotQueryTheMissingSelection() {
+  const harness = createHarness({ activeView: "read" });
+
+  assert.equal(await harness.controller.setExpanded(true), false);
+  assert.equal(harness.log.some(([name]) => name === "PowerPoint.run"), false);
+  assert.match(harness.statuses.at(-1), /once in edit mode/i);
+}
+
 async function testBrowserPreviewCanStillExpandInsideItsFrame() {
   const harness = createHarness({ supported: false, host: null });
 
@@ -210,6 +278,9 @@ async function testAmbiguousContentAppsReportFailure() {
   await testNativeExpandAndRestore();
   await testUnsupportedPowerPointDoesNotPretendToFillTheSlide();
   await testNativeFailureIsReportedWithoutFakeFullscreen();
+  await testSlideShowExpandsThePreparedContentAppWithoutASelection();
+  await testPreparingTheSlideTargetIsBestEffort();
+  await testUnpreparedSlideShowDoesNotQueryTheMissingSelection();
   await testBrowserPreviewCanStillExpandInsideItsFrame();
   await testAmbiguousContentAppsReportFailure();
   console.log("PowerPoint host expansion tests passed.");

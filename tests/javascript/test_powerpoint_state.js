@@ -95,31 +95,37 @@ function flush() {
   return new Promise((resolve) => setImmediate(resolve));
 }
 
-async function createPowerPointHarness(savedConfig) {
+async function createPowerPointHarness(savedConfig, options = {}) {
   let officeReadyCallback = null;
   let resolveImporterReady;
+  let resolveRuntimeReady = () => {};
   let context;
 
   const importerReady = new Promise((resolve) => {
     resolveImporterReady = resolve;
   });
+  const runtimeReady = options.deferRuntimeReady
+    ? new Promise((resolve) => { resolveRuntimeReady = resolve; })
+    : Promise.resolve();
   const renderedStudyIds = [];
   const ensuredStudyIds = [];
   const viewerActions = [];
-  const localStorage = {
-    reads: 0,
-    value: JSON.stringify({
+  const storageValues = new Map([
+    ["dicomSlides.powerPoint.preview.v1", JSON.stringify({
       sourceType: "catalog",
       catalogId: "template-study",
       studyId: "template-study",
       studyUrl: "https://example.test/template-study/study.js",
-    }),
-    getItem() {
-      this.reads += 1;
-      return this.value;
+    })],
+  ]);
+  const localStorage = {
+    reads: 0,
+    getItem(key) {
+      if (key === "dicomSlides.powerPoint.preview.v1") this.reads += 1;
+      return storageValues.get(key) || null;
     },
-    setItem(_key, value) {
-      this.value = value;
+    setItem(key, value) {
+      storageValues.set(key, value);
     },
   };
 
@@ -253,7 +259,8 @@ async function createPowerPointHarness(savedConfig) {
     localStudyUrl(studyId) {
       return `dicom-slides-local:${studyId}`;
     },
-    async importFiles() {
+    async importFiles(...args) {
+      if (options.importFiles) return options.importFiles(...args);
       const study = {
         studyId: "local-study-x",
         title: "Study X",
@@ -280,6 +287,7 @@ async function createPowerPointHarness(savedConfig) {
       timeoutCallbacks.delete(id);
     },
     console,
+    confirm: options.confirm || (() => false),
     document,
     location: { href: "https://example.test/powerpoint/content.html", protocol: "https:" },
     localStorage,
@@ -290,7 +298,9 @@ async function createPowerPointHarness(savedConfig) {
       return id;
     },
     DicomSlidesImporter: importer,
+    DicomSlide: { ready: runtimeReady },
     DicomSlidesPowerPoint: {
+      trustedStudyOrigins: options.trustedStudyOrigins || [],
       studies: [{
         id: "template-study",
         label: "Template study",
@@ -338,11 +348,54 @@ async function createPowerPointHarness(savedConfig) {
     elements,
     ensuredStudyIds,
     localStorage,
+    pendingTimeoutCount: () => timeoutCallbacks.size,
     renderedStudyIds,
     resolveImporterReady,
+    resolveRuntimeReady,
     settings,
     viewerActions,
   };
+}
+
+function localConfig() {
+  return {
+    schemaVersion: 2,
+    sourceType: "local",
+    catalogId: "custom",
+    studyId: "local-study-x",
+    studyUrl: "dicom-slides-local:local-study-x",
+    series: "series-x",
+    mode: "stack",
+    preset: "default",
+    slice: 5,
+    tool: "window",
+    center: null,
+    width: null,
+  };
+}
+
+function importedStudyResult(studyId = "local-study-x") {
+  return {
+    persisted: true,
+    study: {
+      studyId,
+      title: "Study X",
+      seriesCount: 1,
+      series: [{ id: "series-x", slices: 12 }],
+    },
+    totalCompressedBytes: 2048,
+    warnings: [],
+  };
+}
+
+function deferred() {
+  let resolve;
+  let reject;
+  const promise = new Promise((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
 }
 
 async function finishBoot(harness) {
@@ -364,20 +417,7 @@ async function testNewSlideStartsEmpty() {
 }
 
 async function testSavedLocalStudyWinsTheOnlyBootRace() {
-  const savedConfig = {
-    schemaVersion: 2,
-    sourceType: "local",
-    catalogId: "custom",
-    studyId: "local-study-x",
-    studyUrl: "dicom-slides-local:local-study-x",
-    series: "series-x",
-    mode: "stack",
-    preset: "default",
-    slice: 5,
-    tool: "window",
-    center: null,
-    width: null,
-  };
+  const savedConfig = localConfig();
   const harness = await createPowerPointHarness(savedConfig);
   await finishBoot(harness);
 
@@ -390,6 +430,21 @@ async function testSavedLocalStudyWinsTheOnlyBootRace() {
   assert.deepEqual(harness.renderedStudyIds, ["local-study-x"], "startup must not render a competing template");
   assert.deepEqual(harness.ensuredStudyIds, ["local-study-x"], "the saved local package must be restored from IndexedDB");
   assert.equal(harness.localStorage.reads, 0, "PowerPoint must ignore stale preview state");
+}
+
+async function testViewerWaitsForTheRuntimeModules() {
+  const harness = await createPowerPointHarness(localConfig(), { deferRuntimeReady: true });
+  harness.resolveImporterReady();
+  await flush();
+  await flush();
+
+  assert.deepEqual(harness.renderedStudyIds, [], "the viewer must not render before its custom element is registered");
+
+  harness.resolveRuntimeReady();
+  await flush();
+  await flush();
+  await flush();
+  assert.deepEqual(harness.renderedStudyIds, ["local-study-x"]);
 }
 
 async function testImportWaitsForSlideSettingsSave() {
@@ -459,12 +514,170 @@ async function testCompactToolbarControlsThePublicViewerApi() {
   assert.equal(harness.elements.modeMprButton.attributes["aria-pressed"], "true");
 }
 
+async function testCustomHttpsRequiresRecipientLocalTrust() {
+  let confirmationCount = 0;
+  const harness = await createPowerPointHarness(null, {
+    confirm() {
+      confirmationCount += 1;
+      return false;
+    },
+  });
+  await finishBoot(harness);
+  const custom = {
+    sourceType: "remote",
+    catalogId: "custom",
+    studyId: "outside-study",
+    studyUrl: "https://untrusted.example/study.js",
+  };
+
+  assert.throws(
+    () => harness.api.validateStudySource(custom),
+    /not trusted|not approved/i,
+    "HTTPS alone must not authorize executable study data",
+  );
+  assert.equal(confirmationCount, 1, "an untrusted origin must require an explicit local decision");
+}
+
+async function testApprovedCustomOriginIsRememberedOnThisDevice() {
+  let confirmationCount = 0;
+  const harness = await createPowerPointHarness(null, {
+    confirm() {
+      confirmationCount += 1;
+      return true;
+    },
+  });
+  await finishBoot(harness);
+  const custom = {
+    sourceType: "remote",
+    catalogId: "custom",
+    studyId: "approved-study",
+    studyUrl: "https://approved.example/cases/study.js",
+  };
+
+  assert.equal(harness.api.validateStudySource(custom), custom.studyUrl);
+  assert.equal(harness.api.validateStudySource(custom), custom.studyUrl);
+  assert.equal(confirmationCount, 1, "the same approved origin must not prompt twice");
+}
+
+async function testCatalogAndManagedOriginsDoNotPrompt() {
+  let confirmationCount = 0;
+  const harness = await createPowerPointHarness(null, {
+    confirm() {
+      confirmationCount += 1;
+      return false;
+    },
+    trustedStudyOrigins: ["https://managed.example"],
+  });
+  await finishBoot(harness);
+
+  assert.equal(harness.api.validateStudySource({
+    sourceType: "catalog",
+    catalogId: "template-study",
+    studyId: "template-study",
+    studyUrl: "https://example.test/template-study/study.js",
+  }), "https://example.test/template-study/study.js");
+  assert.equal(harness.api.validateStudySource({
+    sourceType: "remote",
+    catalogId: "custom",
+    studyId: "managed-study",
+    studyUrl: "https://managed.example/cases/study.js",
+  }), "https://managed.example/cases/study.js");
+  assert.equal(confirmationCount, 0, "catalog and managed origins must not require recipient approval");
+}
+
+async function testReplacedViewerCannotMutateCurrentUi() {
+  const config = localConfig();
+  const harness = await createPowerPointHarness(config);
+  await finishBoot(harness);
+  const replacedViewer = harness.elements.viewerMount.children[0];
+  await harness.api.renderViewer(config, { persist: false });
+  const currentViewer = harness.elements.viewerMount.children[0];
+  assert.notEqual(currentViewer, replacedViewer);
+
+  harness.elements.statusText.textContent = "Current viewer ready.";
+  harness.elements.loadingPanel.hidden = true;
+  const actionCount = harness.viewerActions.length;
+  const timeoutCount = harness.pendingTimeoutCount();
+  replacedViewer.dispatchEvent({ type: "dicom-state-change", detail: { activeTool: "zoom" } });
+  replacedViewer.dispatchEvent({ type: "dicom-volume-progress", detail: { progress: 0.5 } });
+  replacedViewer.dispatchEvent({ type: "dicom-error", detail: { message: "stale failure" } });
+  replacedViewer.dispatchEvent({ type: "dicom-expand-request", detail: { expanded: true } });
+  await flush();
+
+  assert.equal(harness.elements.statusText.textContent, "Current viewer ready.");
+  assert.equal(harness.elements.loadingPanel.hidden, true);
+  assert.equal(harness.viewerActions.length, actionCount, "a stale expand event must not target the current viewer");
+  assert.equal(harness.pendingTimeoutCount(), timeoutCount, "stale state events must not schedule a save");
+}
+
+async function testOnlyCurrentImportCanUpdateOrUnlockTheUi() {
+  const imports = [];
+  const harness = await createPowerPointHarness(null, {
+    importFiles(_files, importOptions) {
+      const operation = deferred();
+      imports.push({ operation, options: importOptions });
+      return operation.promise;
+    },
+  });
+  await finishBoot(harness);
+
+  const first = harness.api.importLocalFiles([{ name: "first.dcm" }]);
+  await flush();
+  const second = harness.api.importLocalFiles([{ name: "second.dcm" }]);
+  await flush();
+  imports[1].options.onProgress({ phase: "scan", progress: 0.2, message: "Second import" });
+  imports[0].options.onProgress({ phase: "scan", progress: 0.8, message: "Stale import" });
+  imports[0].operation.reject(new DOMException("Import canceled.", "AbortError"));
+  await first;
+
+  assert.equal(harness.elements.statusText.textContent, "Second import");
+  assert.equal(harness.elements.importFilesButton.disabled, true, "the active import must remain locked");
+  assert.equal(harness.elements.cancelImportButton.hidden, false, "the active import must remain cancelable");
+
+  imports[1].operation.resolve(importedStudyResult());
+  await second;
+  assert.equal(harness.elements.importFilesButton.disabled, false);
+  assert.equal(harness.elements.cancelImportButton.hidden, true);
+}
+
+async function testCustomSelectionRestoresLocalConfigUntilItIsDiscarded() {
+  const harness = await createPowerPointHarness(localConfig());
+  await finishBoot(harness);
+  const viewer = harness.elements.viewerMount.children[0];
+  viewer.state.seriesId = "series-2";
+  viewer.state.seriesNumber = "2";
+  viewer.dispatchEvent({ type: "dicom-state-change", detail: viewer.getState() });
+
+  harness.elements.catalogId.value = "template-study";
+  harness.elements.catalogId.dispatchEvent({ type: "change" });
+  harness.elements.catalogId.value = "custom";
+  harness.elements.catalogId.dispatchEvent({ type: "change" });
+  assert.equal(harness.elements.studyId.value, "local-study-x");
+  assert.equal(harness.elements.series.value, "series-2", "custom must restore the latest local viewer state");
+  assert.equal(harness.elements.localSource.hidden, false, "custom must restore the active local study");
+
+  harness.elements.useRemoteSourceButton.click();
+  harness.elements.catalogId.value = "template-study";
+  harness.elements.catalogId.dispatchEvent({ type: "change" });
+  harness.elements.catalogId.value = "custom";
+  harness.elements.catalogId.dispatchEvent({ type: "change" });
+  assert.equal(harness.elements.studyId.value, "");
+  assert.equal(harness.elements.customSource.hidden, false, "explicitly choosing HTTPS must discard the local fallback");
+}
+
 (async () => {
   const tests = {
     empty: testNewSlideStartsEmpty,
     restore: testSavedLocalStudyWinsTheOnlyBootRace,
+    runtime_ready: testViewerWaitsForTheRuntimeModules,
     save: testImportWaitsForSlideSettingsSave,
     toolbar: testCompactToolbarControlsThePublicViewerApi,
+    trust_reject: testCustomHttpsRequiresRecipientLocalTrust,
+    trust_remember: testApprovedCustomOriginIsRememberedOnThisDevice,
+    trust_managed: testCatalogAndManagedOriginsDoNotPrompt,
+    stale_viewer: testReplacedViewerCannotMutateCurrentUi,
+    stale_import: testOnlyCurrentImportCanUpdateOrUnlockTheUi,
+    local_restore: testCustomSelectionRestoresLocalConfigUntilItIsDiscarded,
   };
   const selected = process.argv[2] ? { [process.argv[2]]: tests[process.argv[2]] } : tests;
   assert.ok(Object.values(selected).every((test) => typeof test === "function"), "unknown test name");

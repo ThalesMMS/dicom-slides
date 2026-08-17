@@ -111,8 +111,8 @@
             Drop DICOM files or a ZIP archive here
           </div>
           <div class="import-progress" id="importProgress" hidden>
-            <progress id="importProgressBar" max="1" value="0"></progress>
-            <div>
+            <progress id="importProgressBar" max="1" value="0" aria-labelledby="importProgressText"></progress>
+            <div aria-live="polite">
               <span id="importProgressText">Preparing import…</span>
               <button class="text-button" id="cancelImportButton" type="button">Cancel</button>
             </div>

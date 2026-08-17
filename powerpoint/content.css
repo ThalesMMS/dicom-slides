@@ -222,14 +222,14 @@ button:focus-visible, input:focus-visible, select:focus-visible, [tabindex]:focu
 .import-heading-row > div { min-width: 0; display: grid; gap: 3px; }
 .import-heading-row strong { font-size: 13px; }
 .import-heading-row span { color: #a5b8c5; font-size: 10px; line-height: 1.4; }
-.local-pill {
+.import-heading-row .local-pill {
   margin-left: auto;
   padding: 3px 6px;
   border: 1px solid #3f7184;
   border-radius: 999px;
   background: #0a2a38;
-  color: #bdeaff !important;
-  font-size: 9px !important;
+  color: #bdeaff;
+  font-size: 9px;
   font-weight: 800;
   letter-spacing: .05em;
   text-transform: uppercase;
@@ -251,6 +251,12 @@ button:focus-visible, input:focus-visible, select:focus-visible, [tabindex]:focu
   cursor: pointer;
 }
 .import-drop-zone.drag-over { border-color: var(--accent); background: rgba(14, 165, 233, .12); color: #d9f4ff; }
+.import-drop-zone.disabled {
+  border-color: #344650;
+  background: rgba(8, 13, 17, .72);
+  color: #657984;
+  cursor: default;
+}
 .import-progress { display: grid; gap: 6px; }
 .import-progress[hidden] { display: none; }
 .import-progress progress { width: 100%; height: 8px; accent-color: var(--accent); }

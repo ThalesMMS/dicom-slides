@@ -146,10 +146,10 @@ a presentation or publishing a package.
 
 ## Install from GitHub Pages
 
-The production manifest expects this repository to be published at:
+The production manifest loads the add-in from this exact GitHub Pages URL:
 
 ```text
-https://thalesmms.github.io/dicom-slides/
+https://thalesmms.github.io/dicom-slides/powerpoint/content.html
 ```
 
 After the files are present on GitHub Pages, download
@@ -195,7 +195,9 @@ https://cases.example.org/anonymized-case/study.js
 ```
 
 A remote `study.js` is executable JavaScript, not passive JSON. Only use a
-trusted host. The same attribution and redistribution terms documented in
+trusted host. Catalog and managed origins load automatically; any other HTTPS
+origin requires recipient-local approval before it can load and is remembered
+only on that device. The same attribution and redistribution terms documented in
 [`../DATA_LICENSES.md`](../DATA_LICENSES.md) and
 [`../CITING.md`](../CITING.md) apply to the bundled examples.
 

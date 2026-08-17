@@ -93,6 +93,7 @@
         panX: 0,
         panY: 0,
         activeTool: "window",
+        preset: "default",
         expanded: false,
         mode: "stack",
       };
@@ -227,9 +228,12 @@
         const requestedPreset = this.options.initialPreset;
         if (requestedPreset) {
           const preset = WINDOW_PRESETS.find((entry) => entry.id === requestedPreset);
-          if (preset && preset.center !== null) {
-            this.state.center = Number(preset.center);
-            this.state.width = Number(preset.width);
+          if (preset) {
+            this.state.preset = preset.id;
+            if (preset.center !== null) {
+              this.state.center = Number(preset.center);
+              this.state.width = Number(preset.width);
+            }
           }
         }
         this.state.slice = clamp(Number(this.manifest.initialSlice || 0), 0, dimensions.slices - 1);
@@ -455,6 +459,7 @@
         panX: this.state.panX,
         panY: this.state.panY,
         activeTool: this.state.activeTool,
+        preset: this.state.preset,
         expanded: this.state.expanded,
         mode: this.state.mode,
         volumeReady: Boolean(this.volumeView),
@@ -537,6 +542,7 @@
       if (this.isColor || !this.manifest) return;
       const preset = WINDOW_PRESETS.find((entry) => entry.id === id);
       if (!preset) return;
+      this.state.preset = preset.id;
       if (preset.center === null) {
         this.setWindow(this.manifest.defaultWindow.center, this.manifest.defaultWindow.width);
       } else {
@@ -560,6 +566,7 @@
       this.state.zoom = STACK_DEFAULT_ZOOM;
       this.state.panX = 0;
       this.state.panY = 0;
+      this.state.preset = "default";
       if (!this.isColor) {
         this.state.center = Number(this.manifest.defaultWindow.center);
         this.state.width = Number(this.manifest.defaultWindow.width);

@@ -2,6 +2,7 @@
   "use strict";
 
   const FRAME_SETTINGS_KEY = "dicomSlides.powerPoint.frame.v1";
+  const FRAME_TARGET_SETTINGS_KEY = "dicomSlides.powerPoint.frameTarget.v1";
 
   function documentSettings() {
     return global.Office?.context?.document?.settings || null;
@@ -30,6 +31,22 @@
   function readFrameRecord() {
     try {
       const value = documentSettings()?.get(FRAME_SETTINGS_KEY);
+      return value && typeof value === "object" ? value : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  async function writeFrameTarget(record) {
+    const settings = documentSettings();
+    if (!settings) return false;
+    settings.set(FRAME_TARGET_SETTINGS_KEY, record);
+    return saveSettings(settings);
+  }
+
+  function readFrameTarget() {
+    try {
+      const value = documentSettings()?.get(FRAME_TARGET_SETTINGS_KEY);
       return value && typeof value === "object" ? value : null;
     } catch (_) {
       return null;
@@ -85,9 +102,25 @@
     return { pageSetup, shape, slide };
   }
 
-  async function expandNative() {
+  async function resolveKnownContentApp(context, target) {
+    const presentation = context.presentation;
+    const slide = presentation.slides.getItem(target.slideId);
+    const shape = slide.shapes.getItem(target.shapeId);
+    const pageSetup = presentation.pageSetup;
+    shape.load("id,type,left,top,width,height");
+    pageSetup.load("slideWidth,slideHeight");
+    await context.sync();
+    if (!isContentApp(shape)) {
+      throw new Error("PowerPoint could not find this content add-in on the active slide.");
+    }
+    return { pageSetup, shape, slide };
+  }
+
+  async function expandNative(target = null) {
     return global.PowerPoint.run(async (context) => {
-      const { pageSetup, shape, slide } = await resolveSelectedContentApp(context);
+      const { pageSetup, shape, slide } = target
+        ? await resolveKnownContentApp(context, target)
+        : await resolveSelectedContentApp(context);
       const record = {
         expanded: true,
         native: true,
@@ -98,6 +131,7 @@
         width: shape.width,
         height: shape.height,
       };
+      await writeFrameTarget({ slideId: slide.id, shapeId: shape.id });
       await writeFrameRecord(record);
       shape.left = 0;
       shape.top = 0;
@@ -127,6 +161,7 @@
 
   function createExpansionController(options = {}) {
     const getViewer = typeof options.getViewer === "function" ? options.getViewer : () => null;
+    const getActiveView = typeof options.getActiveView === "function" ? options.getActiveView : () => "edit";
     const onExpandedChange = typeof options.onExpandedChange === "function" ? options.onExpandedChange : () => {};
     const onStatus = typeof options.onStatus === "function" ? options.onStatus : () => {};
     let expanded = Boolean(readFrameRecord()?.expanded);
@@ -161,7 +196,14 @@
           return reportNativeFailure("Slide fullscreen requires PowerPoint 16.105 or later.");
         }
         try {
-          await expandNative();
+          const readView = String(getActiveView() || "").toLowerCase() === "read";
+          const target = readView ? readFrameTarget() : null;
+          if (readView && !target) {
+            return reportNativeFailure(
+              "Open this slide once in edit mode before using fullscreen in Slide Show.",
+            );
+          }
+          await expandNative(target);
           return applyExpandedState(true);
         } catch (error) {
           if (!isPowerPointHost()) return useInternalFallback();
@@ -190,9 +232,25 @@
       return applyExpandedState(Boolean(record?.expanded));
     }
 
+    async function prepare() {
+      if (String(getActiveView() || "").toLowerCase() === "read") return false;
+      if (!isPowerPointHost() || !supportsNativeExpansion()) return false;
+      try {
+        return await global.PowerPoint.run(async (context) => {
+          const { shape, slide } = await resolveSelectedContentApp(context);
+          await writeFrameTarget({ slideId: slide.id, shapeId: shape.id });
+          return true;
+        });
+      } catch (error) {
+        global.console?.warn?.("DICOM Slides could not prepare its PowerPoint slide target.", error);
+        return false;
+      }
+    }
+
     return Object.freeze({
       initialize,
       isExpanded: () => expanded,
+      prepare,
       setExpanded,
       toggle: () => setExpanded(!expanded),
     });
@@ -200,6 +258,7 @@
 
   global.DicomSlidesPowerPointHost = Object.freeze({
     FRAME_SETTINGS_KEY,
+    FRAME_TARGET_SETTINGS_KEY,
     createExpansionController,
   });
 })(window);

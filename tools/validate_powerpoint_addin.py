@@ -6,6 +6,7 @@ from __future__ import annotations
 import sys
 import uuid
 import xml.etree.ElementTree as ET
+from html.parser import HTMLParser
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -15,6 +16,93 @@ MANIFEST = POWERPOINT / "manifest.xml"
 NAMESPACE = "http://schemas.microsoft.com/office/appforoffice/1.1"
 XSI = "http://www.w3.org/2001/XMLSchema-instance"
 NS = {"o": NAMESPACE}
+PRODUCTION_SOURCE_URL = "https://thalesmms.github.io/dicom-slides/powerpoint/content.html"
+APPROVED_SOURCE_URLS = frozenset({PRODUCTION_SOURCE_URL})
+
+
+class AddinHtmlParser(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__()
+        self.ids: set[str] = set()
+        self.script_sources: list[str] = []
+        self.attributes_by_id: dict[str, dict[str, str | None]] = {}
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        attributes = dict(attrs)
+        element_id = attributes.get("id")
+        if element_id:
+            self.ids.add(element_id)
+            self.attributes_by_id[element_id] = attributes
+        if tag == "script" and attributes.get("src"):
+            self.script_sources.append(attributes["src"] or "")
+
+
+def javascript_tokens(source: str) -> list[tuple[str, str]]:
+    """Return code tokens while excluding comments from integration checks."""
+    tokens: list[tuple[str, str]] = []
+    index = 0
+    while index < len(source):
+        character = source[index]
+        if character.isspace():
+            index += 1
+            continue
+        if source.startswith("//", index):
+            newline = source.find("\n", index + 2)
+            index = len(source) if newline < 0 else newline + 1
+            continue
+        if source.startswith("/*", index):
+            end = source.find("*/", index + 2)
+            index = len(source) if end < 0 else end + 2
+            continue
+        if character in {'"', "'", "`"}:
+            quote = character
+            index += 1
+            value: list[str] = []
+            while index < len(source):
+                character = source[index]
+                if character == "\\" and index + 1 < len(source):
+                    value.append(source[index + 1])
+                    index += 2
+                    continue
+                if character == quote:
+                    index += 1
+                    break
+                value.append(character)
+                index += 1
+            tokens.append(("string", "".join(value)))
+            continue
+        if character.isalpha() or character in "_$":
+            end = index + 1
+            while end < len(source) and (source[end].isalnum() or source[end] in "_$"):
+                end += 1
+            tokens.append(("identifier", source[index:end]))
+            index = end
+            continue
+        tokens.append(("punctuation", character))
+        index += 1
+    return tokens
+
+
+def contains_token_sequence(tokens: list[tuple[str, str]], values: tuple[str, ...]) -> bool:
+    token_values = [value for _, value in tokens]
+    return any(token_values[index:index + len(values)] == list(values)
+               for index in range(len(token_values) - len(values) + 1))
+
+
+def has_string_call(tokens: list[tuple[str, str]], owner: str, method: str, argument: str) -> bool:
+    for index in range(len(tokens) - 4):
+        if ([value for _, value in tokens[index:index + 4]] == [owner, ".", method, "("]
+                and tokens[index + 4] == ("string", argument)):
+            return True
+    return False
+
+
+def has_string_comparison(tokens: list[tuple[str, str]], owner: str, member: str, argument: str) -> bool:
+    for index in range(len(tokens) - 6):
+        if ([value for _, value in tokens[index:index + 6]] == [owner, ".", member, "=", "=", "="]
+                and tokens[index + 6] == ("string", argument)):
+            return True
+    return False
 
 
 def require(condition: bool, message: str) -> None:
@@ -43,7 +131,11 @@ def validate_manifest() -> None:
     require(root.attrib.get(f"{{{XSI}}}type") == "ContentApp", "manifest must use ContentApp")
 
     uuid.UUID(element_text(root, "Id"))
-    require(element_text(root, "Version").count(".") == 3, "Version must have four numeric parts")
+    version_parts = element_text(root, "Version").split(".")
+    require(
+        len(version_parts) == 4 and all(part and part.isdigit() for part in version_parts),
+        "Version must have four numeric parts",
+    )
 
     host = root.find("o:Hosts/o:Host", NS)
     require(host is not None and host.attrib.get("Name") == "Presentation", "PowerPoint Presentation host is required")
@@ -55,6 +147,7 @@ def validate_manifest() -> None:
     source_url = source.attrib.get("DefaultValue", "")
     require(source_url.startswith("https://"), "SourceLocation must use HTTPS")
     require(source_url.endswith("/powerpoint/content.html"), "SourceLocation must target powerpoint/content.html")
+    require(source_url in APPROVED_SOURCE_URLS, "SourceLocation must use an approved production URL")
 
     width = int(element_text(settings, "RequestedWidth"))
     height = int(element_text(settings, "RequestedHeight"))
@@ -73,40 +166,47 @@ def validate_html_and_scripts() -> None:
     html_path = POWERPOINT / "content.html"
     require(html_path.is_file(), "missing powerpoint/content.html")
     html = html_path.read_text(encoding="utf-8")
-    required_fragments = (
+    parser = AddinHtmlParser()
+    parser.feed(html)
+    required_scripts = (
         "https://appsforoffice.microsoft.com/lib/1/hosted/office.js",
         "../runtime/dicom-slide.js",
         "studies.js",
         "dicom-importer.js",
         "powerpoint-host.js",
         "content.js",
-        'id="viewerMount"',
-        'id="settingsForm"',
-        'id="importFilesInput"',
-        'id="importFolderInput"',
-        'id="importZipInput"',
-        'id="importDropZone"',
-        "webkitdirectory",
     )
-    for fragment in required_fragments:
-        require(fragment in html, f"content.html is missing {fragment!r}")
+    for script_source in required_scripts:
+        require(script_source in parser.script_sources, f"content.html is missing script src {script_source!r}")
+    for element_id in (
+        "viewerMount", "settingsForm", "importFilesInput", "importFolderInput", "importZipInput", "importDropZone",
+    ):
+        require(element_id in parser.ids, f"content.html is missing id {element_id!r}")
+    require(
+        "webkitdirectory" in parser.attributes_by_id.get("importFolderInput", {}),
+        "content.html importFolderInput is missing webkitdirectory",
+    )
 
     for relative in ("content.css", "content.js", "studies.js", "dicom-importer.js", "powerpoint-host.js"):
         require((POWERPOINT / relative).is_file(), f"missing powerpoint/{relative}")
+    require((ROOT / "runtime" / "dicom-slide.js").is_file(), "missing runtime/dicom-slide.js")
 
     javascript = (POWERPOINT / "content.js").read_text(encoding="utf-8")
-    for token in (
-        "Office.onReady",
-        "getActiveViewAsync",
-        "ActiveViewChanged",
-        "document.settings",
-        "dicom-study-viewer",
-        "importLocalFiles",
-        "ensureRegistered",
-        "dicom-slides-local:",
-    ):
-        require(token in javascript, f"content.js is missing required integration token {token!r}")
-    require("eval(" not in javascript, "content.js must not use eval")
+    tokens = javascript_tokens(javascript)
+    contracts = (
+        ("Office.onReady", contains_token_sequence(tokens, ("Office", ".", "onReady", "("))),
+        ("getActiveViewAsync call", contains_token_sequence(tokens, ("getActiveViewAsync", "("))),
+        ("ActiveViewChanged event", contains_token_sequence(tokens, ("EventType", ".", "ActiveViewChanged"))),
+        ("document.settings", contains_token_sequence(tokens, ("document", ".", "settings"))),
+        ("dicom-study-viewer creation", has_string_call(tokens, "document", "createElement", "dicom-study-viewer")),
+        ("importLocalFiles function", contains_token_sequence(tokens, ("function", "importLocalFiles", "("))),
+        ("ensureRegistered call", contains_token_sequence(tokens, ("DicomSlidesImporter", ".", "ensureRegistered", "("))),
+        ("PowerPoint add-in export", contains_token_sequence(tokens, ("global", ".", "DicomSlidesPowerPointAddin", "="))),
+        ("local protocol handling", has_string_comparison(tokens, "resolved", "protocol", "dicom-slides-local:")),
+    )
+    for label, present in contracts:
+        require(present, f"content.js is missing required integration {label!r}")
+    require(not contains_token_sequence(tokens, ("eval", "(")), "content.js must not use eval")
 
 
 def validate_importer() -> None:
@@ -144,6 +244,7 @@ def validate_documentation() -> None:
         "not embedded into the `.pptx`",
         "Implicit VR Little Endian",
         "CompressionStream",
+        PRODUCTION_SOURCE_URL,
     ):
         require(token in readme, f"powerpoint/README.md is missing {token!r}")
 

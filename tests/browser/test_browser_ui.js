@@ -35,15 +35,58 @@ const baseUrl = process.env.DICOM_SLIDE_BASE_URL || "http://127.0.0.1:8765";
     await page.waitForFunction(() => customElements.get("dicom-study-viewer"));
     const componentResult = await page.locator("dicom-study-viewer").evaluate(async (element) => {
       await element.ready;
+      const compactToolbar = element.shadowRoot.querySelector(".dss-toolbar");
+      const topBars = [
+        compactToolbar,
+        element.shadowRoot.querySelector(".dss-seriesbar"),
+        element.shadowRoot.querySelector(".dsv-toolbar"),
+      ].filter((node) => node && getComputedStyle(node).display !== "none");
       return {
         state: element.getState(),
-        seriesOptions: element.shadowRoot.querySelectorAll('.dss-select option').length,
-        modes: element.shadowRoot.querySelectorAll('button[data-view-mode]').length,
+        seriesOptions: element.shadowRoot.querySelectorAll('.dss-series-select option').length,
+        modes: compactToolbar
+          ? compactToolbar.querySelectorAll('button[data-view-mode]').length
+          : 0,
+        visibleTopBars: topBars.length,
+        toolIcons: compactToolbar
+          ? compactToolbar.querySelectorAll("button[data-tool] svg").length
+          : 0,
+        presetControl: compactToolbar
+          ? compactToolbar.querySelector("select[aria-label='Window preset']")?.tagName
+          : null,
+        overlayText: element.shadowRoot.querySelector(".dsv-overlay-left")?.textContent || "",
       };
     });
     assert.equal(componentResult.seriesOptions, 4);
     assert.equal(componentResult.modes, 3);
     assert.equal(String(componentResult.state.seriesNumber), "1");
+    assert.equal(componentResult.visibleTopBars, 1, "the web viewer must expose one compact top toolbar");
+    assert.equal(componentResult.toolIcons, 4, "all four 2D tools must use icons in the compact toolbar");
+    assert.equal(componentResult.presetControl, "SELECT", "window presets must use a compact dropdown");
+    assert.match(componentResult.overlayText, /MRI-DIR — multi-series synthetic T1 MR/);
+    assert.match(componentResult.overlayText, /Series 1 · T1Post1/);
+
+    const keyboardToolState = await page.locator("dicom-study-viewer").evaluate(async (element) => {
+      const viewerRoot = element.shadowRoot.querySelector(".dsv-root");
+      viewerRoot.focus();
+      viewerRoot.dispatchEvent(new KeyboardEvent("keydown", { key: "z", bubbles: true }));
+      viewerRoot.dispatchEvent(new KeyboardEvent("keydown", { key: "4", bubbles: true }));
+      return {
+        stateTool: element.getState().activeTool,
+        statePreset: element.getState().preset,
+        selectedTool: element.shadowRoot
+          .querySelector(".dss-toolbar button[data-tool][aria-pressed='true']")
+          ?.dataset.tool,
+        selectedPreset: element.shadowRoot
+          .querySelector(".dss-toolbar select[aria-label='Window preset']")
+          ?.value,
+      };
+    });
+    assert.deepEqual(
+      keyboardToolState,
+      { stateTool: "zoom", statePreset: "bone", selectedTool: "zoom", selectedPreset: "bone" },
+      "keyboard shortcuts must immediately update the compact toolbar selections"
+    );
     assert.equal(await page.evaluate(() => window.dicomReadyCount), 1, "component readiness must be emitted once per load");
     assert.equal(await page.locator('script[data-dicom-slide-runtime-module]').count(), 10, "duplicate entry scripts must reuse one module load");
     const forwardingResult = await page.locator("dicom-study-viewer").evaluate(async (element) => {
@@ -59,19 +102,19 @@ const baseUrl = process.env.DICOM_SLIDE_BASE_URL || "http://127.0.0.1:8765";
     await page.goto(`${baseUrl}/tests/browser/component-external-smoke.html`, { waitUntil: "load" });
     const externalControlsResult = await page.locator("dicom-study-viewer").evaluate(async (external) => {
       await external.ready;
-      const studyBar = external.shadowRoot.querySelector(".dss-seriesbar");
+      const compactToolbar = external.shadowRoot.querySelector(".dss-toolbar");
       const viewerToolbar = external.shadowRoot.querySelector(".dsv-toolbar");
       const overlay = external.shadowRoot.querySelector(".dsv-overlay-left");
       const state = external.getState();
       return {
-        studyBarDisplay: getComputedStyle(studyBar).display,
+        compactToolbarDisplay: getComputedStyle(compactToolbar).display,
         viewerToolbarDisplay: getComputedStyle(viewerToolbar).display,
         overlayText: overlay.textContent,
         seriesOptions: state.seriesOptions,
         volumeSupported: state.volumeSupported,
       };
     });
-    assert.equal(externalControlsResult.studyBarDisplay, "none", "external controls must hide the study series bar");
+    assert.equal(externalControlsResult.compactToolbarDisplay, "none", "external controls must hide the compact toolbar");
     assert.equal(externalControlsResult.viewerToolbarDisplay, "none", "external controls must hide the core toolbar");
     assert.match(externalControlsResult.overlayText, /MRI-DIR — multi-series synthetic T1 MR/);
     assert.match(externalControlsResult.overlayText, /Series 1 · T1Post1/);
@@ -126,11 +169,11 @@ const baseUrl = process.env.DICOM_SLIDE_BASE_URL || "http://127.0.0.1:8765";
     assert.ok(activeSlide, "the active catalog slide must load in its own iframe");
     await activeSlide.locator("dicom-study-viewer").evaluate((element) => element.ready);
     assert.equal(await activeSlide.locator("dicom-study-viewer").evaluate((element) => element.getState().mode), "stack");
-    await activeSlide.locator("[data-action='expand']").click();
+    await activeSlide.locator(".dss-toolbar [data-action='expand']").click();
     await page.waitForFunction(() => document.body.classList.contains("viewer-is-expanded"));
     assert.equal(await activeSlide.locator(".study-slide").evaluate((element) => element.classList.contains("viewer-expanded")), true);
-    assert.equal(await activeSlide.locator("[data-action='expand']").getAttribute("aria-pressed"), "true");
-    await activeSlide.locator("[data-action='expand']").click();
+    assert.equal(await activeSlide.locator(".dss-toolbar [data-action='expand']").getAttribute("aria-pressed"), "true");
+    await activeSlide.locator(".dss-toolbar [data-action='expand']").click();
     await page.waitForFunction(() => !document.body.classList.contains("viewer-is-expanded"));
 
     await page.goto(
@@ -146,11 +189,11 @@ const baseUrl = process.env.DICOM_SLIDE_BASE_URL || "http://127.0.0.1:8765";
       "4 · T1Post4 · 14 images",
     ]);
 
-    const modeLabels = await page.locator("button[data-view-mode]").allTextContents();
+    const modeLabels = await page.locator(".dss-toolbar button[data-view-mode]").allTextContents();
     assert.deepEqual(modeLabels.map((label) => label.trim()), ["2D", "MPR", "3D"]);
-    assert.equal(await page.locator('button[data-view-mode="stack"]').getAttribute("aria-pressed"), "true");
+    assert.equal(await page.locator('.dss-toolbar button[data-view-mode="stack"]').getAttribute("aria-pressed"), "true");
 
-    await page.locator('button[data-view-mode="mpr"]').click();
+    await page.locator('.dss-toolbar button[data-view-mode="mpr"]').click();
     await page.waitForFunction(() => window.viewer.viewer.volumeView && window.viewer.viewer.getState().mode === "mpr");
     const mprTools = await page.locator('[data-volume-panel="mpr"] [data-volume-tool]').allTextContents();
     assert.deepEqual(mprTools.map((label) => label.trim()), ["Crosshair", "W/L", "Pan", "Zoom", "Scroll"]);
@@ -179,7 +222,7 @@ const baseUrl = process.env.DICOM_SLIDE_BASE_URL || "http://127.0.0.1:8765";
     const mprZoom = await page.evaluate(() => window.viewer.viewer.volumeView.getState().mprTransforms.axial.zoom);
     assert.notEqual(mprZoom, 1, "MPR Zoom must change the plane scale");
 
-    await page.locator('button[data-view-mode="volume"]').click();
+    await page.locator('.dss-toolbar button[data-view-mode="volume"]').click();
     await page.waitForFunction(() => window.viewer.viewer.volumeView && window.viewer.viewer.getState().mode === "volume");
     const initialTransferState = await page.evaluate(() => window.viewer.viewer.volumeView.getState());
     assert.equal(initialTransferState.transferFunctionId, "angio", "3D must open with Angio selected");
@@ -279,8 +322,8 @@ const baseUrl = process.env.DICOM_SLIDE_BASE_URL || "http://127.0.0.1:8765";
       await page.screenshot({ path: process.env.DICOM_SLIDE_SCREENSHOT, fullPage: true });
     }
 
-    await page.locator('button[data-view-mode="stack"]').click();
-    assert.equal(await page.locator('button[data-view-mode="stack"]').getAttribute("aria-pressed"), "true");
+    await page.locator('.dss-toolbar button[data-view-mode="stack"]').click();
+    assert.equal(await page.locator('.dss-toolbar button[data-view-mode="stack"]').getAttribute("aria-pressed"), "true");
     const expectedSeries = [
       ["series-1-t1post1-4d84985", "1", 14],
       ["series-2-t1post2-3381f4c", "2", 14],

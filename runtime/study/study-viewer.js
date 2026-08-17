@@ -2,19 +2,28 @@
   "use strict";
 
   const STYLE_TEXT = `
-.dss-root{width:100%;height:100%;min-height:320px;display:grid;grid-template-rows:auto minmax(0,1fr);overflow:hidden;background:#05070a;color:#eef5fa;font:500 13px/1.3 ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
-.dss-seriesbar{min-height:50px;display:grid;grid-template-columns:minmax(150px,1fr) auto minmax(240px,1.5fr) auto auto auto;align-items:center;gap:7px;padding:7px 9px;border-bottom:1px solid #27313b;background:linear-gradient(180deg,#17202a,#0d1218)}
-.dss-study{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:800;color:#e6f2f8}
-.dss-label{color:#91a4b3;font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase}
-.dss-select,.dss-button{height:32px;border:1px solid #34414d;border-radius:7px;background:#17202a;color:#e5edf3;font:inherit}
-.dss-select{min-width:0;width:100%;padding:0 30px 0 9px;cursor:pointer}
-.dss-button{box-sizing:border-box;inline-size:34px;min-inline-size:34px;max-inline-size:34px;padding:0;display:inline-grid;place-items:center;justify-self:center;cursor:pointer;font-weight:800}.dss-button:hover:not(:disabled){border-color:#38bdf8;background:#20303c}.dss-button:disabled{opacity:.4;cursor:default}
-.dss-count{min-width:56px;color:#9eb0bd;text-align:right;font-variant-numeric:tabular-nums}
+.dss-root{--dss-bg:#05070a;--dss-panel:#17212b;--dss-line:#2a3743;--dss-text:#eef5fa;--dss-muted:#96a8b6;--dss-accent:#38bdf8;width:100%;height:100%;min-height:320px;display:grid;grid-template-rows:auto minmax(0,1fr);overflow:hidden;background:var(--dss-bg);color:var(--dss-text);font:500 13px/1.3 ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+.dss-toolbar{min-width:0;min-height:42px;display:flex;align-items:center;gap:5px;padding:4px 6px;border-bottom:1px solid var(--dss-line);background:linear-gradient(180deg,#17212b,#0d1319);overflow-x:auto;overflow-y:hidden;scrollbar-width:thin}
+.dss-group{min-width:0;display:flex;align-items:center;gap:3px;padding-left:5px;border-left:1px solid var(--dss-line)}
+.dss-toolbar>.dss-group:first-child{padding-left:0;border-left:0}
+.dss-series-group{flex:1 1 230px;min-width:150px;max-width:420px}
+.dss-actions{margin-left:auto}
+.dss-button,.dss-select{flex:0 0 auto;height:32px;border:1px solid #354450;border-radius:6px;color:#dce6ed;background:var(--dss-panel);font:700 12px/1 ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+.dss-button{min-width:32px;padding:0 8px;cursor:pointer;white-space:nowrap}
+.dss-button:hover:not(:disabled),.dss-select:hover:not(:disabled){border-color:#4b6472;background:#20303b}
+.dss-button[aria-pressed="true"]{border-color:var(--dss-accent);background:#0d3345;color:#e6f8ff}
+.dss-button:disabled,.dss-select:disabled{opacity:.58;cursor:default}
+.dss-icon-button{width:32px;padding:0;display:inline-grid;place-items:center}
+.dss-icon-button svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.dss-select{min-width:0;padding:0 28px 0 8px;cursor:pointer}
+.dss-preset-select{width:104px}
+.dss-series-select{width:100%}
+.dss-visually-hidden{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 .dss-viewer{min-height:0;overflow:hidden;background:#000}
 .dss-root[data-controls="external"]{grid-template-rows:minmax(0,1fr)}
-.dss-root[data-controls="external"] .dss-seriesbar{display:none}
+.dss-root[data-controls="external"] .dss-toolbar{display:none}
 .dss-error{display:grid;place-items:center;height:100%;padding:24px;background:#14080a;color:#ffd5dc;text-align:center;white-space:pre-wrap}
-@media(max-width:720px){.dss-seriesbar{grid-template-columns:auto minmax(0,1fr) auto auto}.dss-study{display:none}.dss-label{display:none}.dss-count{min-width:42px}}
+@media(max-width:700px){.dss-toolbar{gap:4px}.dss-group{padding-left:4px}.dss-series-group{min-width:130px}.dss-button,.dss-select{height:30px}.dss-icon-button{width:30px}.dss-preset-select{width:96px}}
 `;
 
   const scriptPromises = new Map();
@@ -67,6 +76,7 @@
       this.viewer = null;
       this.seriesIndex = -1;
       this.expanded = false;
+      this.activePreset = "default";
       this.loadToken = 0;
       this.destroyed = false;
       this._build();
@@ -80,35 +90,86 @@
       root.className = "dss-root";
       root.dataset.controls = this.options.controls === "external" ? "external" : "internal";
       root.innerHTML = `
-        <div class="dss-seriesbar">
-          <div class="dss-study">Loading study…</div>
-          <span class="dss-label">Series</span>
-          <select class="dss-select" aria-label="Study series" disabled></select>
-          <button class="dss-button" type="button" data-action="previous-series" aria-label="Previous series" disabled>←</button>
-          <button class="dss-button" type="button" data-action="next-series" aria-label="Next series" disabled>→</button>
-          <span class="dss-count" aria-live="polite"></span>
+        <div class="dss-toolbar" aria-label="Viewer controls">
+          <div class="dss-group dss-tool-group" aria-label="2D interaction tool">
+            <button class="dss-button dss-icon-button" type="button" data-tool="window"
+                    aria-label="Window and level" aria-pressed="true" title="Window/Level (W)" disabled>
+              <svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="12" cy="12" r="7"/><path d="M12 5a7 7 0 0 1 0 14zM12 2v2m0 16v2M2 12h2m16 0h2"/></svg>
+            </button>
+            <button class="dss-button dss-icon-button" type="button" data-tool="pan"
+                    aria-label="Pan" aria-pressed="false" title="Pan (M)" disabled>
+              <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M8.5 11V6.5a1.5 1.5 0 0 1 3 0V10m0-4.5a1.5 1.5 0 0 1 3 0V10m0-3a1.5 1.5 0 0 1 3 0v4m0-2a1.5 1.5 0 0 1 3 0v5c0 4.2-2.8 7-7 7h-1.2a6 6 0 0 1-4.8-2.4L4.2 14a1.7 1.7 0 0 1 2.5-2.3l1.8 1.8z"/></svg>
+            </button>
+            <button class="dss-button dss-icon-button" type="button" data-tool="zoom"
+                    aria-label="Zoom" aria-pressed="false" title="Zoom (Z)" disabled>
+              <svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 5 5M10.5 7.5v6m-3-3h6"/></svg>
+            </button>
+            <button class="dss-button dss-icon-button" type="button" data-tool="scroll"
+                    aria-label="Scroll images" aria-pressed="false" title="Scroll images (S)" disabled>
+              <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M7 6h10M7 12h10M7 18h10M4 8V4m0 0L2 6m2-2 2 2m14 10v4m0 0-2-2m2 2 2-2"/></svg>
+            </button>
+          </div>
+          <div class="dss-group">
+            <label class="dss-visually-hidden" for="dss-window-preset">Window preset</label>
+            <select class="dss-select dss-preset-select" id="dss-window-preset"
+                    aria-label="Window preset" title="Window preset" disabled>
+              <option value="default">Default</option>
+              <option value="abdomen">Abdomen</option>
+              <option value="lung">Lung</option>
+              <option value="bone">Bone</option>
+              <option value="brain">Brain</option>
+            </select>
+          </div>
+          <div class="dss-group dss-series-group">
+            <label class="dss-visually-hidden" for="dss-series-select">Series</label>
+            <select class="dss-select dss-series-select" id="dss-series-select"
+                    aria-label="Study series" title="Series" disabled></select>
+          </div>
+          <div class="dss-group dss-mode-group" aria-label="View mode">
+            <button class="dss-button" type="button" data-view-mode="stack"
+                    aria-pressed="true" title="2D view" disabled>2D</button>
+            <button class="dss-button" type="button" data-view-mode="mpr"
+                    aria-pressed="false" title="MPR unavailable" disabled>MPR</button>
+            <button class="dss-button" type="button" data-view-mode="volume"
+                    aria-pressed="false" title="3D unavailable" disabled>3D</button>
+          </div>
+          <div class="dss-group dss-actions">
+            <button class="dss-button" type="button" data-action="reset" title="Reset view" disabled>Reset</button>
+            <button class="dss-button dss-icon-button" type="button" data-action="expand"
+                    aria-label="Expand viewer to fill the slide" aria-pressed="false"
+                    title="Expand viewer to fill the slide" disabled>
+              <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M9 4H4v5M15 4h5v5M9 20H4v-5m11 5h5v-5"/></svg>
+            </button>
+          </div>
         </div>
         <div class="dss-viewer"></div>`;
       this.container.replaceChildren(root);
       this.root = root;
-      this.studyTitle = root.querySelector(".dss-study");
-      this.select = root.querySelector(".dss-select");
-      this.previousButton = root.querySelector("[data-action='previous-series']");
-      this.nextButton = root.querySelector("[data-action='next-series']");
-      this.count = root.querySelector(".dss-count");
+      this.select = root.querySelector(".dss-series-select");
+      this.presetSelect = root.querySelector(".dss-preset-select");
       this.viewerHost = root.querySelector(".dss-viewer");
     }
 
     _bind() {
       this.select.addEventListener("change", () => this.setSeries(this.select.value));
-      this.previousButton.addEventListener("click", () => this.setSeries(this._neighborIndex(-1)));
-      this.nextButton.addEventListener("click", () => this.setSeries(this._neighborIndex(1)));
+      this.presetSelect.addEventListener("change", () => this.setPreset(this.presetSelect.value));
+      this.root.addEventListener("click", (event) => {
+        const button = event.target.closest("button");
+        if (!button || button.disabled || !this.viewer) return;
+        if (button.dataset.tool) this.setActiveTool(button.dataset.tool);
+        else if (button.dataset.viewMode) {
+          this.setMode(button.dataset.viewMode).catch((error) => this._showError(error));
+        } else if (button.dataset.action === "reset") this.reset();
+        else if (button.dataset.action === "expand") this.viewer.requestExpandedToggle();
+      });
+      for (const eventName of ["viewerready", "toolchange", "modechange", "windowchange", "viewchange"]) {
+        this.root.addEventListener(eventName, (event) => this._syncToolbar(event.detail || this.getState()));
+      }
     }
 
     async _initialize() {
       try {
         this.study = await loadStudy(this.options.studyId, this.options.manifestUrl);
-        this.studyTitle.textContent = this.study.title || this.options.studyId;
         this.select.replaceChildren();
         this.study.series.forEach((series, index) => {
           const option = document.createElement("option");
@@ -161,10 +222,10 @@
         const viewer = new global.DicomSlideViewer.Viewer(this.viewerHost, {
           caseId: series.caseId,
           manifestUrl: new URL(series.manifest, this.study.baseUrl).href,
-          controls: this.options.controls,
-          studyTitle: this.options.controls === "external" ? (this.study.title || this.options.studyId) : null,
-          seriesTitle: this.options.controls === "external" ? series.title : null,
-          seriesNumber: this.options.controls === "external" ? (series.number || index + 1) : null,
+          controls: "external",
+          studyTitle: this.study.title || this.options.studyId,
+          seriesTitle: series.title,
+          seriesNumber: series.number || index + 1,
         });
         this.viewer = viewer;
         await viewer.ready;
@@ -174,6 +235,7 @@
         }
         viewer.setExpanded(this.expanded);
         this._updateSeriesControls(false);
+        this._syncToolbar(this.getState());
         this.root.dispatchEvent(new CustomEvent("serieschange", { bubbles: true, detail: this.getState() }));
         return viewer;
       } catch (error) {
@@ -183,19 +245,44 @@
     }
 
     _updateSeriesControls(loading) {
-      const total = this.study ? this.study.series.length : 0;
-      this.previousButton.disabled = loading || this._neighborIndex(-1) < 0;
-      this.nextButton.disabled = loading || this._neighborIndex(1) < 0;
       this.select.disabled = loading || !this.study.series.some((series) => series.available !== false);
-      this.count.textContent = total ? `${this.seriesIndex + 1} / ${total}` : "";
     }
 
-    _neighborIndex(direction) {
-      if (!this.study) return -1;
-      for (let index = this.seriesIndex + direction; index >= 0 && index < this.study.series.length; index += direction) {
-        if (this.study.series[index].available !== false) return index;
-      }
-      return -1;
+    _syncToolbar(state) {
+      const current = state || {};
+      const active = Boolean(this.viewer && this.viewer.manifest);
+      const mode = current.mode || "stack";
+      const tool = current.activeTool || "window";
+      const preset = current.preset || this.activePreset || "default";
+      this.activePreset = preset;
+      this.root.dataset.viewMode = mode;
+      this.root.querySelectorAll("[data-tool]").forEach((button) => {
+        button.setAttribute("aria-pressed", String(button.dataset.tool === tool));
+        button.disabled = !active || mode !== "stack" || (button.dataset.tool === "window" && Boolean(current.isColor));
+      });
+      this.presetSelect.disabled = !active || Boolean(current.isColor);
+      this.presetSelect.value = preset;
+      this.select.disabled = !active || !this.study?.series.some((series) => series.available !== false);
+      this.root.querySelectorAll("[data-view-mode]").forEach((button) => {
+        const stack = button.dataset.viewMode === "stack";
+        button.setAttribute("aria-pressed", String(button.dataset.viewMode === mode));
+        button.disabled = !active || (!stack && current.volumeSupported !== true);
+        button.title = stack
+          ? "Open 2D view (D)"
+          : current.volumeSupported === true
+            ? `Open ${button.dataset.viewMode === "mpr" ? "multiplanar MPR" : "3D volume rendering"} (D)`
+            : `${button.textContent} unavailable: ${current.volumeReason || "series is not compatible"}`;
+      });
+      const resetButton = this.root.querySelector("[data-action='reset']");
+      const expandButton = this.root.querySelector("[data-action='expand']");
+      resetButton.disabled = !active;
+      expandButton.disabled = !active && !this.expanded;
+      expandButton.setAttribute("aria-pressed", String(this.expanded));
+      expandButton.setAttribute(
+        "aria-label",
+        this.expanded ? "Restore viewer size" : "Expand viewer to fill the slide"
+      );
+      expandButton.title = this.expanded ? "Restore viewer size" : "Expand viewer to fill the slide";
     }
 
     _showError(error) {
@@ -228,15 +315,31 @@
     }
 
     setSlice(value) { return this.viewer && this.viewer.setSlice(value); }
-    setPreset(value) { return this.viewer && this.viewer.setPreset(value); }
+    setPreset(value) {
+      this.activePreset = value;
+      const result = this.viewer && this.viewer.setPreset(value);
+      this._syncToolbar(this.getState());
+      return result;
+    }
     setMode(value) { return this.viewer && this.viewer.setMode(value); }
     setWindow(center, width) { return this.viewer && this.viewer.setWindow(center, width); }
-    setActiveTool(value) { return this.viewer && this.viewer.setActiveTool(value); }
+    setActiveTool(value) {
+      const result = this.viewer && this.viewer.setActiveTool(value);
+      this._syncToolbar(this.getState());
+      return result;
+    }
     setExpanded(value) {
       this.expanded = Boolean(value);
-      return this.viewer && this.viewer.setExpanded(this.expanded);
+      const result = this.viewer && this.viewer.setExpanded(this.expanded);
+      this._syncToolbar(this.getState());
+      return result;
     }
-    reset() { return this.viewer && this.viewer.reset(); }
+    reset() {
+      this.activePreset = "default";
+      const result = this.viewer && this.viewer.reset();
+      this._syncToolbar(this.getState());
+      return result;
+    }
 
     destroy() {
       this.destroyed = true;

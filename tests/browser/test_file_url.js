@@ -27,7 +27,7 @@ const root = path.resolve(__dirname, "..", "..");
       await element.setMode("mpr");
       return {
         mode: element.getState().mode,
-        modes: element.shadowRoot.querySelectorAll("button[data-view-mode]").length,
+        modes: element.shadowRoot.querySelectorAll(".dss-toolbar button[data-view-mode]").length,
       };
     });
     assert.deepEqual(state, { mode: "mpr", modes: 3 });
