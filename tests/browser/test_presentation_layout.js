@@ -9,6 +9,9 @@ const slideIds = [
   "01-introduction",
   "02-visible-human",
   "03-mri-dir",
+  "03a-powerpoint-web",
+  "03b-powerpoint-upload",
+  "03c-powerpoint-macos",
   "01a-ai-setup",
   "01b-ai-prompt",
   "01c-ai-review",
@@ -47,6 +50,13 @@ const slideIds = [
             const rect = item.getBoundingClientRect();
             return { top: rect.top, bottom: rect.bottom, left: rect.left, right: rect.right };
           }),
+          installImage: document.querySelector(".install-visual img")
+            ? {
+                naturalWidth: document.querySelector(".install-visual img").naturalWidth,
+                objectFit: getComputedStyle(document.querySelector(".install-visual img")).objectFit,
+                objectPosition: getComputedStyle(document.querySelector(".install-visual img")).objectPosition,
+              }
+            : null,
         }));
         assert.equal(layout.language, "en", `${slideIds[index]} must declare English`);
         assert.ok(layout.scrollWidth <= layout.clientWidth + 1, `${slideIds[index]} overflows horizontally`);
@@ -69,11 +79,17 @@ const slideIds = [
             "All review items must use the same single-column width"
           );
         }
+        if (slideIds[index].startsWith("03") && slideIds[index].includes("powerpoint")) {
+          assert.ok(layout.installImage, `${slideIds[index]} must include its PowerPoint screenshot`);
+          assert.ok(layout.installImage.naturalWidth > 0, `${slideIds[index]} screenshot must load`);
+          assert.equal(layout.installImage.objectFit, "contain", `${slideIds[index]} screenshot must remain uncropped`);
+          assert.match(layout.installImage.objectPosition, /50%/, `${slideIds[index]} screenshot must be vertically centered`);
+        }
       }
       assert.deepEqual(pageErrors, []);
       await page.close();
     }
-    console.log("OK: seven English slides fit the desktop and narrow presentation viewports");
+    console.log("OK: ten English slides fit the desktop and narrow presentation viewports");
   } finally {
     await browser.close();
   }

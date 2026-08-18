@@ -37,12 +37,15 @@ assert.deepEqual(
     "01-introduction",
     "02-visible-human",
     "03-mri-dir",
+    "03a-powerpoint-web",
+    "03b-powerpoint-upload",
+    "03c-powerpoint-macos",
     "01a-ai-setup",
     "01b-ai-prompt",
     "01c-ai-review",
     "04-references",
   ],
-  "presentation must publish the approved seven-slide narrative"
+  "presentation must publish the approved ten-slide narrative"
 );
 
 const slideFiles = catalog.map((slide) => {
@@ -61,6 +64,12 @@ for (const [id, html] of slideHtmlById) {
   assert.match(html, /<html lang="en">/, `${id} must declare English`);
 }
 assert.match(slideHtmlById.get("01a-ai-setup"), /Start with three things/);
+assert.match(slideHtmlById.get("03a-powerpoint-web"), /Home.*Add-ins.*Advanced/s);
+assert.match(slideHtmlById.get("03a-powerpoint-web"), /powerpoint-addins-advanced\.png/);
+assert.match(slideHtmlById.get("03b-powerpoint-upload"), /Upload My Add-in/);
+assert.match(slideHtmlById.get("03b-powerpoint-upload"), /powerpoint-upload-addin-manifest\.png/);
+assert.match(slideHtmlById.get("03c-powerpoint-macos"), /Library\/Containers\/com\.microsoft\.Powerpoint\/Data\/Documents\/wef/);
+assert.match(slideHtmlById.get("03c-powerpoint-macos"), /dicom-slides-powerpoint-plugin\.png/);
 assert.match(slideHtmlById.get("01b-ai-prompt"), /https:\/\/github\.com\/ThalesMMS\/dicom-slides/);
 assert.match(slideHtmlById.get("01b-ai-prompt"), /PATH TO MY DICOM FOLDER OR ZIP/);
 assert.match(slideHtmlById.get("01c-ai-review"), /Check the result before you share it/);
