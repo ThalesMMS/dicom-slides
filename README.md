@@ -8,6 +8,10 @@ copy and no backend.
 
 ## Screenshots
 
+**PowerPoint content add-in**
+
+![DICOM Slides PowerPoint add-in with interactive 2D, MPR, and 3D viewer](docs/images/dicom-slides-powerpoint-plugin.png)
+
 **Multi-series MR study in 2D**
 
 ![MRI-DIR synthetic T1 MR study in the 2D viewer](docs/images/mri-dir-2d.png)
