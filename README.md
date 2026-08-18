@@ -24,7 +24,7 @@ copy and no backend.
 
 ![Visible Human abdominal CT rendered in the 3D viewer](docs/images/visible-human-ct-3d.png)
 
-## Install the PowerPoint add-in (about 3 minutes)
+## Install the PowerPoint add-in (quick installation)
 
 The add-in itself is hosted on GitHub Pages. You only install its small XML
 manifest; no DICOM files are uploaded during installation or import.
