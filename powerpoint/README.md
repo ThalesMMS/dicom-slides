@@ -46,7 +46,7 @@ selected DICOM files or ZIP
   -> require one Study Instance UID
   -> group by Series Instance UID
   -> spatially sort each series when orientation/position permit
-  -> decode stored pixels
+  -> decode stored pixels, including JPEG 2000 through local OpenJPEG/Wasm
   -> apply Rescale Slope/Intercept for monochrome images
   -> convert to Int16 little-endian or RGB8
   -> split each series into 12-slice chunks
@@ -71,6 +71,8 @@ The import-time converter intentionally has a bounded compatibility surface:
 - Implicit VR Little Endian;
 - Explicit VR Little Endian;
 - Explicit VR Big Endian;
+- JPEG 2000 Lossless (`1.2.840.10008.1.2.4.90`);
+- JPEG 2000 (`1.2.840.10008.1.2.4.91`);
 - one frame per DICOM file;
 - monochrome images with 8- or 16-bit allocated samples;
 - signed and unsigned stored values;
@@ -81,11 +83,18 @@ The import-time converter intentionally has a bounded compatibility surface:
 - ZIP method 0 (stored) and method 8 (deflate), when the webview provides
   `DecompressionStream('deflate-raw')`.
 
-Compressed DICOM transfer syntaxes, encapsulated Pixel Data, multiframe
-objects, palettes, YBR, RLE, JPEG, JPEG-LS, and JPEG 2000 are not decoded by the
-browser importer. Such series are skipped with a visible warning. Use the
-repository's offline `tools/convert_study.py` pipeline when codec support is
-required; it can use `gdcmconv`, and single-frame JPEG 2000 can use Pillow.
+JPEG 2000 decoding uses the vendored `@cornerstonejs/codec-openjpeg` WebAssembly
+build under its MIT license. The JavaScript, Wasm binary, and license are served
+from `powerpoint/vendor/openjpeg/`; pixel data never leaves the local WebView.
+The vendored decoder cannot preserve negative signed 8-bit JPEG 2000 samples,
+so that specific representation is rejected with an explicit technical reason.
+Unsigned 8-bit and signed/unsigned 16-bit-allocated JPEG 2000 remain supported.
+
+Other compressed DICOM transfer syntaxes, multiframe objects, palettes, YBR,
+RLE, JPEG, and JPEG-LS are not decoded by the browser importer. Such series are
+skipped with a codec-specific reason. Use the repository's offline
+`tools/convert_study.py` pipeline when another codec is required; it can use
+`gdcmconv`.
 
 ## Persistence model
 
@@ -137,7 +146,8 @@ During local conversion, the package does not retain the values of:
 - Institution Name.
 
 The importer reports that such tags were detected without saving their values.
-It also reports `Burned In Annotation = YES` when present.
+Their presence never blocks local conversion. It also reports
+`Burned In Annotation = YES` when present.
 
 This is not an anonymization certificate. Study/series descriptions may still
 contain identifiers, private tags are not exhaustively analyzed, and text may

@@ -172,6 +172,7 @@ def validate_html_and_scripts() -> None:
         "https://appsforoffice.microsoft.com/lib/1/hosted/office.js",
         "../runtime/dicom-slide.js",
         "studies.js",
+        "vendor/openjpeg/openjpegwasm_decode.js",
         "dicom-importer.js",
         "powerpoint-host.js",
         "content.js",
@@ -187,7 +188,18 @@ def validate_html_and_scripts() -> None:
         "content.html importFolderInput is missing webkitdirectory",
     )
 
-    for relative in ("content.css", "content.js", "studies.js", "dicom-importer.js", "powerpoint-host.js"):
+    for relative in (
+        "content.css",
+        "content.js",
+        "studies.js",
+        "dicom-importer.js",
+        "powerpoint-host.js",
+        "vendor/openjpeg/openjpegwasm_decode.js",
+        "vendor/openjpeg/openjpegwasm_decode.wasm",
+        "vendor/openjpeg/LICENSE",
+        "vendor/openjpeg/LICENSE-OPENJPEG",
+        "vendor/openjpeg/README.md",
+    ):
         require((POWERPOINT / relative).is_file(), f"missing powerpoint/{relative}")
     require((ROOT / "runtime" / "dicom-slide.js").is_file(), "missing runtime/dicom-slide.js")
 
@@ -227,6 +239,8 @@ def validate_importer() -> None:
         "rescaleIntercept",
         "patientName",
         "patientID",
+        "JPEG2000_TRANSFER_SYNTAXES",
+        "OpenJPEGWASM",
     )
     for token in required_tokens:
         require(token in javascript, f"dicom-importer.js is missing {token!r}")
@@ -244,6 +258,8 @@ def validate_documentation() -> None:
         "not embedded into the `.pptx`",
         "Implicit VR Little Endian",
         "CompressionStream",
+        "JPEG 2000",
+        "OpenJPEG",
         PRODUCTION_SOURCE_URL,
     ):
         require(token in readme, f"powerpoint/README.md is missing {token!r}")

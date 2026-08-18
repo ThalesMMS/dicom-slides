@@ -12,6 +12,10 @@ global.DicomSlideData = {
   registerChunk(caseId, index, encoded) { chunks.set(`${caseId}:${index}`, encoded); },
 };
 global.__DICOM_SLIDE_STUDIES__ = {};
+global.OpenJPEGWASM = require(path.resolve(
+  __dirname,
+  "../../powerpoint/vendor/openjpeg/openjpegwasm_decode.js",
+));
 
 require(path.resolve(__dirname, "../../powerpoint/dicom-importer.js"));
 const importer = global.DicomSlidesImporter;
@@ -78,11 +82,12 @@ function makeDicom({
   pixelValues = [1024, 1025, 1026, 1027],
   rescaleIntercept = -1024,
   includeFileMeta = true,
+  transferSyntax = "1.2.840.10008.1.2.1",
 } = {}) {
   const preamble = new Uint8Array(132);
   preamble.set(new TextEncoder().encode("DICM"), 128);
   const meta = [
-    element(0x0002, 0x0010, "UI", textPayload("1.2.840.10008.1.2.1", "UI")),
+    element(0x0002, 0x0010, "UI", textPayload(transferSyntax, "UI")),
   ];
   const pixels = new Uint8Array(8);
   const pixelView = new DataView(pixels.buffer);
@@ -116,6 +121,69 @@ function makeDicom({
     element(0x7fe0, 0x0010, "OW", pixels),
   ];
   return includeFileMeta ? concat([preamble, ...meta, ...dataset]) : concat(dataset);
+}
+
+function encapsulatedPixelData(encodedFrame) {
+  const padding = encodedFrame.length % 2 ? new Uint8Array(1) : new Uint8Array(0);
+  const fragment = concat([encodedFrame, padding]);
+  return concat([
+    u16(0x7fe0), u16(0x0010), new TextEncoder().encode("OB"), u16(0), u32(0xffffffff),
+    u16(0xfffe), u16(0xe000), u32(0),
+    u16(0xfffe), u16(0xe000), u32(fragment.length), fragment,
+    u16(0xfffe), u16(0xe0dd), u32(0),
+  ]);
+}
+
+function makeJpeg2000Dicom({
+  rgb = false,
+  precision = rgb ? 8 : 12,
+  pixelRepresentation = 0,
+  transferSyntax = "1.2.840.10008.1.2.4.91",
+} = {}) {
+  const preamble = new Uint8Array(132);
+  preamble.set(new TextEncoder().encode("DICM"), 128);
+  const monochromeFrames = {
+    8: "/0//UQApAAAAAAACAAAAAgAAAAAAAAAAAAAAAgAAAAIAAAAAAAAAAAABBwEB/1IADAAAAAEAAAQEAAH/XAAEQED/ZAAlAAFDcmVhdGVkIGJ5IE9wZW5KUEVHIHZlcnNpb24gMi41LjT/kAAKAAAAAAAWAAH/k9+AKAejbvo7/9k=",
+    10: "/0//UQApAAAAAAACAAAAAgAAAAAAAAAAAAAAAgAAAAIAAAAAAAAAAAABCQEB/1IADAAAAAEAAAQEAAH/XAAEQFD/ZAAlAAFDcmVhdGVkIGJ5IE9wZW5KUEVHIHZlcnNpb24gMi41LjT/kAAKAAAAAAAWAAH/k9+wKAZH4VJ//9k=",
+    12: "/0//UQApAAAAAAACAAAAAgAAAAAAAAAAAAAAAgAAAAIAAAAAAAAAAAABCwEB/1IADAAAAAEAAAQEAAH/XAAEQGD/ZAAlAAFDcmVhdGVkIGJ5IE9wZW5KUEVHIHZlcnNpb24gMi41LjT/kAAKAAAAAAAZAAH/k9/gIAeAEydHPmZf/9k=",
+  };
+  const encodedFrame = new Uint8Array(Buffer.from(
+    rgb
+      ? "/0//UQAvAAAAAAACAAAAAQAAAAAAAAAAAAAAAgAAAAEAAAAAAAAAAAADBwEBBwEBBwEB/1IADAAAAAEBAAQEAAH/XAAEQED/ZAAlAAFDcmVhdGVkIGJ5IE9wZW5KUEVHIHZlcnNpb24gMi41LjT/kAAKAAAAAAAZAAH/k8+0CAhbwCEBwCEI/9k="
+      : monochromeFrames[precision],
+    "base64",
+  ));
+  const rows = rgb ? 1 : 2;
+  const columns = 2;
+  const bits = precision <= 8 ? 8 : 16;
+  const bitsStored = precision;
+  const description = rgb ? "3D MIP" : "AVEC I.V.";
+  return concat([
+    preamble,
+    element(0x0002, 0x0010, "UI", textPayload(transferSyntax, "UI")),
+    element(0x0008, 0x0060, "CS", textPayload(rgb ? "OT" : "CT", "CS")),
+    element(0x0008, 0x0080, "LO", textPayload("Hospital Example", "LO")),
+    element(0x0008, 0x1030, "LO", textPayload("JPEG 2000 Study", "LO")),
+    element(0x0008, 0x103e, "LO", textPayload(description, "LO")),
+    element(0x0010, 0x0010, "PN", textPayload("Jane^Doe", "PN")),
+    element(0x0010, 0x0020, "LO", textPayload("PATIENT-123", "LO")),
+    element(0x0020, 0x000d, "UI", textPayload(rgb ? "2.16.840.4.1" : "2.16.840.5.1", "UI")),
+    element(0x0020, 0x000e, "UI", textPayload(rgb ? "2.16.840.4.1.1" : "2.16.840.5.1.1", "UI")),
+    element(0x0020, 0x0011, "IS", textPayload("1", "IS")),
+    element(0x0020, 0x0013, "IS", textPayload("1", "IS")),
+    usElement(0x0028, 0x0002, rgb ? 3 : 1),
+    element(0x0028, 0x0004, "CS", textPayload(rgb ? "RGB" : "MONOCHROME2", "CS")),
+    ...(rgb ? [usElement(0x0028, 0x0006, 0)] : []),
+    usElement(0x0028, 0x0010, rows),
+    usElement(0x0028, 0x0011, columns),
+    usElement(0x0028, 0x0100, bits),
+    usElement(0x0028, 0x0101, bitsStored),
+    usElement(0x0028, 0x0102, bitsStored - 1),
+    usElement(0x0028, 0x0103, pixelRepresentation),
+    element(0x0028, 0x1052, "DS", textPayload("0", "DS")),
+    element(0x0028, 0x1053, "DS", textPayload("1", "DS")),
+    encapsulatedPixelData(encodedFrame),
+  ]);
 }
 
 function implicitElement(group, item, payload) {
@@ -387,6 +455,48 @@ async function main() {
   const rgbRaw = await gunzipBase64(chunks.get(`${rgbSeries.caseId}:0`));
   assert.deepEqual(Array.from(rgbRaw), [1, 3, 5, 2, 4, 6]);
 
+  const jpeg2000MonoResult = await importer.importFiles([
+    fileLike("avec-iv.dcm", makeJpeg2000Dicom()),
+  ], { chunkSize: 1, persist: false });
+  const jpeg2000MonoSeries = jpeg2000MonoResult.study.series[0];
+  const jpeg2000MonoManifest = manifests.get(jpeg2000MonoSeries.caseId);
+  const jpeg2000MonoRaw = await gunzipBase64(chunks.get(`${jpeg2000MonoSeries.caseId}:0`));
+  const jpeg2000MonoView = new DataView(
+    jpeg2000MonoRaw.buffer,
+    jpeg2000MonoRaw.byteOffset,
+    jpeg2000MonoRaw.byteLength,
+  );
+  assert.equal(jpeg2000MonoManifest.valueRange.minimum, 0);
+  assert.equal(jpeg2000MonoManifest.valueRange.maximum, 4095);
+  assert.deepEqual(
+    [0, 1, 1024, 4095],
+    [0, 1, 2, 3].map((index) => jpeg2000MonoView.getInt16(index * 2, true)),
+  );
+
+  const jpeg2000TenBitResult = await importer.importFiles([
+    fileLike("ten-bit.dcm", makeJpeg2000Dicom({ precision: 10 })),
+  ], { chunkSize: 1, persist: false });
+  const jpeg2000TenBitSeries = jpeg2000TenBitResult.study.series[0];
+  const jpeg2000TenBitRaw = await gunzipBase64(chunks.get(`${jpeg2000TenBitSeries.caseId}:0`));
+  const jpeg2000TenBitView = new DataView(
+    jpeg2000TenBitRaw.buffer,
+    jpeg2000TenBitRaw.byteOffset,
+    jpeg2000TenBitRaw.byteLength,
+  );
+  assert.deepEqual(
+    [0, 1, 2, 3].map((index) => jpeg2000TenBitView.getInt16(index * 2, true)),
+    [0, 0, 127, 255],
+  );
+
+  const jpeg2000RgbResult = await importer.importFiles([
+    fileLike("3d-mip.dcm", makeJpeg2000Dicom({ rgb: true })),
+  ], { chunkSize: 1, persist: false });
+  const jpeg2000RgbSeries = jpeg2000RgbResult.study.series[0];
+  const jpeg2000RgbManifest = manifests.get(jpeg2000RgbSeries.caseId);
+  const jpeg2000RgbRaw = await gunzipBase64(chunks.get(`${jpeg2000RgbSeries.caseId}:0`));
+  assert.equal(jpeg2000RgbManifest.pixelType, "rgb8");
+  assert.deepEqual(Array.from(jpeg2000RgbRaw), [1, 2, 3, 4, 5, 6]);
+
   const zip = makeZip([
     { name: "stored/slice-1.dcm", data: first, method: 0 },
     { name: "deflated/slice-2.dcm", data: second, method: 8 },
@@ -416,8 +526,39 @@ async function main() {
     /multiple Study Instance UIDs/
   );
 
-  const compressedMeta = Object.assign({}, parsed, { transferSyntaxUID: "1.2.840.10008.1.2.4.90" });
-  assert.match(importer.testing.supportedRecordReason(compressedMeta), /compressed/);
+  const jpeg2000Meta = importer.testing.parseDicomBuffer(
+    makeJpeg2000Dicom(),
+    "jpeg2000-meta.dcm",
+    true,
+  );
+  assert.equal(importer.testing.supportedRecordReason(jpeg2000Meta), null);
+  const jpeg2000LosslessMeta = importer.testing.parseDicomBuffer(
+    makeJpeg2000Dicom({ transferSyntax: "1.2.840.10008.1.2.4.90" }),
+    "jpeg2000-lossless-meta.dcm",
+    true,
+  );
+  assert.equal(importer.testing.supportedRecordReason(jpeg2000LosslessMeta), null);
+
+  const signedEightBitJpeg2000Meta = importer.testing.parseDicomBuffer(
+    makeJpeg2000Dicom({ precision: 8, pixelRepresentation: 1 }),
+    "signed-eight-bit-jpeg2000.dcm",
+    true,
+  );
+  assert.match(
+    importer.testing.supportedRecordReason(signedEightBitJpeg2000Meta),
+    /signed 8-bit JPEG 2000 is not supported by the local decoder/i,
+  );
+
+  await assert.rejects(
+    importer.importFiles([
+      fileLike("jpeg-ls.dcm", makeDicom({ transferSyntax: "1.2.840.10008.1.2.4.80" })),
+    ], { persist: false }),
+    (error) => {
+      assert.match(error.message, /compressed or unsupported transfer syntax/);
+      assert.doesNotMatch(error.message, /Identifying metadata/);
+      return true;
+    },
+  );
 
   console.log("PowerPoint browser DICOM importer tests passed.");
 }

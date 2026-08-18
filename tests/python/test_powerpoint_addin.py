@@ -144,6 +144,18 @@ class PowerPointAddinTests(unittest.TestCase):
     def test_browser_dicom_importer_contract(self) -> None:
         VALIDATOR.validate_importer()
 
+    def test_powerpoint_loads_local_jpeg2000_decoder(self) -> None:
+        html = (ROOT / "powerpoint" / "content.html").read_text(encoding="utf-8")
+        self.assertIn(
+            '<script src="vendor/openjpeg/openjpegwasm_decode.js"></script>',
+            html,
+        )
+        codec_root = ROOT / "powerpoint" / "vendor" / "openjpeg"
+        self.assertTrue((codec_root / "openjpegwasm_decode.js").is_file())
+        self.assertTrue((codec_root / "openjpegwasm_decode.wasm").is_file())
+        self.assertTrue((codec_root / "LICENSE").is_file())
+        self.assertTrue((codec_root / "LICENSE-OPENJPEG").is_file())
+
     def test_runtime_entrypoint_is_present(self) -> None:
         self.assertTrue((ROOT / "runtime" / "dicom-slide.js").is_file())
 

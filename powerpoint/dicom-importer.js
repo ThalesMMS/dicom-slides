@@ -13,6 +13,10 @@
   const IMPLICIT_VR_LITTLE_ENDIAN = "1.2.840.10008.1.2";
   const EXPLICIT_VR_LITTLE_ENDIAN = "1.2.840.10008.1.2.1";
   const EXPLICIT_VR_BIG_ENDIAN = "1.2.840.10008.1.2.2";
+  const JPEG2000_TRANSFER_SYNTAXES = new Set([
+    "1.2.840.10008.1.2.4.90",
+    "1.2.840.10008.1.2.4.91",
+  ]);
   const UNCOMPRESSED_TRANSFER_SYNTAXES = new Set([
     IMPLICIT_VR_LITTLE_ENDIAN,
     EXPLICIT_VR_LITTLE_ENDIAN,
@@ -104,6 +108,7 @@
   });
 
   const databaseReady = openDatabase().catch(() => null);
+  let openJpegModulePromise = null;
 
   function abortIfRequested(signal) {
     if (signal?.aborted) throw new DOMException("Import canceled.", "AbortError");
@@ -367,18 +372,30 @@
 
   function supportedRecordReason(meta) {
     const transferSyntax = safeText(meta, "transferSyntaxUID") || EXPLICIT_VR_LITTLE_ENDIAN;
-    if (!UNCOMPRESSED_TRANSFER_SYNTAXES.has(transferSyntax)) return `compressed or unsupported transfer syntax (${transferSyntax})`;
-    if (meta.pixelOffset == null || meta.pixelLength == null || meta.pixelLength === 0xffffffff) return "encapsulated or missing Pixel Data";
+    const isJpeg2000 = JPEG2000_TRANSFER_SYNTAXES.has(transferSyntax);
+    if (!UNCOMPRESSED_TRANSFER_SYNTAXES.has(transferSyntax) && !isJpeg2000) {
+      return `compressed or unsupported transfer syntax (${transferSyntax})`;
+    }
+    if (meta.pixelOffset == null || meta.pixelLength == null) return "missing Pixel Data";
+    if (isJpeg2000 && meta.pixelLength !== 0xffffffff) return "JPEG 2000 Pixel Data is not encapsulated";
+    if (!isJpeg2000 && meta.pixelLength === 0xffffffff) return "encapsulated Pixel Data requires a supported codec";
     if (firstNumber(meta.numberOfFrames, 1) !== 1) return "only single-frame images are supported";
     const samples = Number(meta.samplesPerPixel || 1);
     const bits = Number(meta.bitsAllocated);
     if (samples === 1 && ![8, 16].includes(bits)) return `Bits Allocated ${bits}; expected 8 or 16`;
     if (samples === 3 && bits !== 8) return "RGB must use three 8-bit samples";
     if (![1, 3].includes(samples)) return `Samples per Pixel ${samples}; expected 1 or 3`;
+    if (isJpeg2000 && bits === 8 && Number(meta.pixelRepresentation || 0) === 1) {
+      return "signed 8-bit JPEG 2000 is not supported by the local decoder";
+    }
     if (samples === 3 && safeText(meta, "photometricInterpretation").toUpperCase() !== "RGB") {
       return `color space ${safeText(meta, "photometricInterpretation") || "unknown"}; expected RGB`;
     }
     return null;
+  }
+
+  function isJpeg2000Record(record) {
+    return JPEG2000_TRANSFER_SYNTAXES.has(safeText(record, "transferSyntaxUID"));
   }
 
   async function readSourceBytes(source) {
@@ -386,7 +403,132 @@
     return result instanceof Uint8Array ? result : new Uint8Array(result);
   }
 
+  function extractEncapsulatedSingleFrame(record, bytes) {
+    if (firstNumber(record.numberOfFrames, 1) !== 1) {
+      throw new Error("Only single-frame encapsulated DICOM input is supported.");
+    }
+    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    const fragments = [];
+    let totalLength = 0;
+    let itemIndex = 0;
+    let offset = Number(record.pixelOffset);
+
+    while (offset + 8 <= bytes.length) {
+      const group = view.getUint16(offset, true);
+      const element = view.getUint16(offset + 2, true);
+      const length = view.getUint32(offset + 4, true);
+      offset += 8;
+      if (group === 0xfffe && element === 0xe0dd) {
+        if (length !== 0) throw new Error("Encapsulated Pixel Data sequence delimiter has a non-zero length.");
+        if (!fragments.length) throw new Error("Encapsulated frame has no pixel fragments.");
+        const frame = new Uint8Array(totalLength);
+        let writeOffset = 0;
+        fragments.forEach((fragment) => {
+          frame.set(fragment, writeOffset);
+          writeOffset += fragment.byteLength;
+        });
+        return frame;
+      }
+      if (group !== 0xfffe || element !== 0xe000) throw new Error("Expected an encapsulated Pixel Data item.");
+      if (length === 0xffffffff || offset + length > bytes.length) {
+        throw new Error("Encapsulated pixel fragment is truncated.");
+      }
+      if (itemIndex > 0) {
+        const fragment = bytes.subarray(offset, offset + length);
+        fragments.push(fragment);
+        totalLength += fragment.byteLength;
+      }
+      itemIndex += 1;
+      offset += length;
+    }
+    throw new Error("Encapsulated frame is missing the Sequence Delimitation Item.");
+  }
+
+  async function openJpegModule() {
+    if (!openJpegModulePromise) {
+      if (typeof global.OpenJPEGWASM !== "function") {
+        throw new Error("The local JPEG 2000 decoder is unavailable.");
+      }
+      openJpegModulePromise = Promise.resolve(global.OpenJPEGWASM({
+        print() {},
+        printErr() {},
+      })).catch((error) => {
+        openJpegModulePromise = null;
+        throw new Error(`Could not initialize the local JPEG 2000 decoder: ${error.message}`);
+      });
+    }
+    return openJpegModulePromise;
+  }
+
+  async function decodeJpeg2000(record) {
+    const bytes = record.sourceBytes || await readSourceBytes(record.source);
+    const encodedFrame = extractEncapsulatedSingleFrame(record, bytes);
+    const openJpeg = await openJpegModule();
+    const decoder = new openJpeg.J2KDecoder();
+    try {
+      decoder.getEncodedBuffer(encodedFrame.byteLength).set(encodedFrame);
+      decoder.decode();
+      const frameInfo = decoder.getFrameInfo();
+      const expectedWidth = Number(record.columns);
+      const expectedHeight = Number(record.rows);
+      const expectedComponents = Number(record.samplesPerPixel || 1);
+      const expectedSigned = Number(record.pixelRepresentation || 0) === 1;
+      if (frameInfo.width !== expectedWidth || frameInfo.height !== expectedHeight) {
+        throw new Error(`JPEG 2000 dimensions are ${frameInfo.width}x${frameInfo.height}; expected ${expectedWidth}x${expectedHeight}.`);
+      }
+      if (frameInfo.componentCount !== expectedComponents) {
+        throw new Error(`JPEG 2000 frame has ${frameInfo.componentCount} components; expected ${expectedComponents}.`);
+      }
+      const expectedBitsStored = Number(record.bitsStored || record.bitsAllocated);
+      if (!Number.isInteger(frameInfo.bitsPerSample)
+          || frameInfo.bitsPerSample < 1
+          || frameInfo.bitsPerSample > Number(record.bitsAllocated)
+          || frameInfo.bitsPerSample !== expectedBitsStored) {
+        throw new Error(`JPEG 2000 uses ${frameInfo.bitsPerSample}-bit samples; DICOM Bits Stored is ${expectedBitsStored}.`);
+      }
+      if (Boolean(frameInfo.isSigned) !== expectedSigned) {
+        throw new Error("JPEG 2000 signedness does not match DICOM Pixel Representation.");
+      }
+      return {
+        bytes: Uint8Array.from(decoder.getDecodedBuffer()),
+        bitsPerSample: frameInfo.bitsPerSample,
+        isSigned: Boolean(frameInfo.isSigned),
+      };
+    } catch (error) {
+      throw new Error(`Could not decode JPEG 2000 frame: ${error.message}`);
+    } finally {
+      decoder.delete();
+    }
+  }
+
+  function scaleStoredValue(raw, record) {
+    const slope = firstNumber(record.rescaleSlope, 1);
+    const intercept = firstNumber(record.rescaleIntercept, 0);
+    const scaled = Math.round(raw * slope + intercept);
+    if (!Number.isFinite(scaled) || scaled < -32768 || scaled > 32767) {
+      throw new Error(`Pixel value ${scaled} is outside the signed 16-bit range after rescale.`);
+    }
+    return scaled;
+  }
+
   async function readMonochromePixels(record) {
+    if (isJpeg2000Record(record)) {
+      const decoded = await decodeJpeg2000(record);
+      const expectedPixels = Number(record.rows) * Number(record.columns);
+      const bytesPerSample = decoded.bitsPerSample > 8 ? 2 : 1;
+      if (decoded.bytes.byteLength !== expectedPixels * bytesPerSample) {
+        throw new Error(`JPEG 2000 pixel payload has ${decoded.bytes.byteLength} bytes; expected ${expectedPixels * bytesPerSample}.`);
+      }
+      const view = new DataView(decoded.bytes.buffer, decoded.bytes.byteOffset, decoded.bytes.byteLength);
+      const output = new Int16Array(expectedPixels);
+      for (let index = 0; index < expectedPixels; index += 1) {
+        const raw = bytesPerSample === 2
+          ? (decoded.isSigned ? view.getInt16(index * 2, true) : view.getUint16(index * 2, true))
+          : (decoded.isSigned ? view.getInt8(index) : view.getUint8(index));
+        output[index] = scaleStoredValue(raw, record);
+      }
+      return output;
+    }
     const bytes = record.sourceBytes || await readSourceBytes(record.source);
     const bits = Number(record.bitsAllocated);
     const expectedPixels = Number(record.rows) * Number(record.columns);
@@ -410,8 +552,6 @@
     const rightShift = highBit + 1 - bitsStored;
     const mask = bitsStored >= 32 ? 0xffffffff : (2 ** bitsStored) - 1;
     const signBit = 2 ** (bitsStored - 1);
-    const slope = firstNumber(record.rescaleSlope, 1);
-    const intercept = firstNumber(record.rescaleIntercept, 0);
     const output = new Int16Array(expectedPixels);
     const view = new DataView(bytes.buffer, bytes.byteOffset + start, expectedBytes);
 
@@ -419,16 +559,20 @@
       let raw = bits === 16 ? view.getUint16(index * 2, sourceLittleEndian) : view.getUint8(index);
       raw = (raw >>> rightShift) & mask;
       if (signed && raw >= signBit) raw -= 2 ** bitsStored;
-      const scaled = Math.round(raw * slope + intercept);
-      if (!Number.isFinite(scaled) || scaled < -32768 || scaled > 32767) {
-        throw new Error(`Pixel value ${scaled} is outside the signed 16-bit range after rescale.`);
-      }
-      output[index] = scaled;
+      output[index] = scaleStoredValue(raw, record);
     }
     return output;
   }
 
   async function readRgbPixels(record) {
+    if (isJpeg2000Record(record)) {
+      const decoded = await decodeJpeg2000(record);
+      const expectedBytes = Number(record.rows) * Number(record.columns) * 3;
+      if (decoded.bitsPerSample !== 8 || decoded.bytes.byteLength !== expectedBytes) {
+        throw new Error(`JPEG 2000 RGB payload has ${decoded.bytes.byteLength} bytes; expected ${expectedBytes} 8-bit samples.`);
+      }
+      return decoded.bytes;
+    }
     const bytes = record.sourceBytes || await readSourceBytes(record.source);
     const expectedPixels = Number(record.rows) * Number(record.columns);
     const expectedBytes = expectedPixels * 3;
@@ -796,6 +940,7 @@
     const studyTitle = safeText(firstHeader, "studyDescription") || "Imported DICOM study";
     const studyId = `local-${slugify(studyTitle, "dicom-study")}-${studyHash}`;
     const warnings = [];
+    const conversionFailures = [];
     if (scanErrors.length) warnings.push(`${scanErrors.length} non-DICOM or incomplete file(s) were ignored.`);
 
     const phiTagsDetected = headers.some((record) => ["patientName", "patientID", "accessionNumber", "institutionName"].some((key) => Boolean(safeText(record, key))));
@@ -816,7 +961,9 @@
       const reasons = Array.from(new Set(records.map(supportedRecordReason).filter(Boolean)));
       if (reasons.length) {
         const description = safeText(records[0], "seriesDescription") || safeText(records[0], "seriesNumber") || String(position + 1);
-        warnings.push(`Series ${description} skipped: ${reasons.join("; ")}.`);
+        const failure = `Series ${description} skipped: ${reasons.join("; ")}.`;
+        warnings.push(failure);
+        conversionFailures.push(failure);
         continue;
       }
       const first = records[0];
@@ -853,12 +1000,14 @@
           manifest: `series/${seriesId}/manifest.js`,
         });
       } catch (error) {
-        warnings.push(`Series ${description} skipped: ${error.message}`);
+        const failure = `Series ${description} skipped: ${error.message}`;
+        warnings.push(failure);
+        conversionFailures.push(failure);
       }
     }
 
     if (!seriesEntries.length) {
-      throw new Error(`No series could be converted. ${warnings.join(" ")}`);
+      throw new Error(`No series could be converted. ${conversionFailures.join(" ")}`);
     }
 
     const study = {
