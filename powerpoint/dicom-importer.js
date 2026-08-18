@@ -1038,9 +1038,11 @@
       totalPixelBytes,
     };
 
-    report(onProgress, "persist", 0.96, "Writing the converted study to the local cache…");
+    report(onProgress, "persist", 0.96, options.persist === false
+      ? "Finalizing the converted study…"
+      : "Writing the converted study to the local cache…");
     const persisted = options.persist === false ? false : await storePackage(packageRecord);
-    await registerPackage(packageRecord);
+    if (options.register !== false) await registerPackage(packageRecord);
     report(onProgress, "complete", 1, `Import complete: ${seriesEntries.length} series, ${headers.length} images.`);
     return { package: packageRecord, study, warnings, persisted, totalCompressedBytes, totalPixelBytes };
   }

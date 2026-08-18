@@ -17,7 +17,7 @@ $ErrorActionPreference = "Stop"
 
 $AddinId = "3c8d5463-e606-4e35-86de-515114b31089"
 $ExpectedSourceUrl = "https://thalesmms.github.io/dicom-slides/powerpoint/content.html"
-$ExpectedManifestSha256 = "376053c2827a2b08ebfcd5eba762eb884f49e3793311349ed7076b9ccc93c9d3"
+$ExpectedManifestSha256 = "0ba89340b76f46a83edc3704ac1a389362a9b9cd9fab093d3678fba17657a280"
 $ManifestFileName = "dicom-slides-manifest.xml"
 $PowerPointWebUrl = "https://powerpoint.cloud.microsoft/"
 $WindowsDesktopGuideUrl = "https://learn.microsoft.com/en-us/office/dev/add-ins/testing/create-a-network-shared-folder-catalog-for-task-pane-and-content-add-ins"

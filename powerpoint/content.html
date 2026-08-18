@@ -130,12 +130,12 @@
 
           <div class="local-source" id="localSource" hidden>
             <div>
-              <strong>Study imported on this device</strong>
-              <span id="localSourceSummary">The converted package is in the local cache.</span>
+              <strong>Study stored in this presentation</strong>
+              <span id="localSourceSummary">The complete converted package is embedded in the PPTX.</span>
             </div>
             <div class="local-source-actions">
               <button class="text-button" id="useRemoteSourceButton" type="button">Use HTTPS URL</button>
-              <button class="text-button danger-text" id="removeLocalSourceButton" type="button">Remove cached study</button>
+              <button class="text-button danger-text" id="removeLocalSourceButton" type="button">Remove study</button>
             </div>
           </div>
 
@@ -211,6 +211,7 @@
   <script src="studies.js"></script>
   <script src="vendor/openjpeg/openjpegwasm_decode.js"></script>
   <script src="dicom-importer.js"></script>
+  <script src="presentation-storage.js"></script>
   <script src="powerpoint-host.js"></script>
   <script src="content.js"></script>
 </body>

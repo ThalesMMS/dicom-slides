@@ -4,7 +4,7 @@
   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
   xsi:type="ContentApp">
   <Id>3c8d5463-e606-4e35-86de-515114b31089</Id>
-  <Version>1.2.0.0</Version>
+  <Version>1.3.0.0</Version>
   <ProviderName>ThalesMMS</ProviderName>
   <DefaultLocale>en-US</DefaultLocale>
   <DisplayName DefaultValue="DICOM Slides" />
@@ -15,6 +15,11 @@
   <Hosts>
     <Host Name="Presentation" />
   </Hosts>
+  <Requirements>
+    <Sets DefaultMinVersion="1.7">
+      <Set Name="PowerPointApi" MinVersion="1.7" />
+    </Sets>
+  </Requirements>
   <DefaultSettings>
     <SourceLocation DefaultValue="https://thalesmms.github.io/dicom-slides/powerpoint/content.html" />
     <RequestedWidth>800</RequestedWidth>

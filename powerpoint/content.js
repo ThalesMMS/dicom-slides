@@ -2,9 +2,12 @@
   "use strict";
 
   const SETTINGS_KEY = "dicomSlides.powerPoint.config.v1";
+  const PACKAGE_REFERENCE_KEY = "dicomSlides.powerPoint.packageRef.v1";
+  const PACKAGE_CLEANUP_KEY = "dicomSlides.powerPoint.packageCleanup.v1";
   const LOCAL_STORAGE_KEY = "dicomSlides.powerPoint.preview.v1";
   const TRUSTED_ORIGINS_KEY = "dicomSlides.powerPoint.trustedStudyOrigins.v1";
-  const SCHEMA_VERSION = 2;
+  const SCHEMA_VERSION = 3;
+  const PRESENTATION_STORAGE_MODE = "presentation-custom-xml";
   const VALID_MODES = new Set(["stack", "mpr", "volume"]);
   const VALID_PRESETS = new Set(["default", "abdomen", "lung", "bone", "brain"]);
   const VALID_TOOLS = new Set(["window", "pan", "zoom", "scroll"]);
@@ -22,10 +25,14 @@
     officeView: "edit",
     bootPromise: null,
     importAbortController: null,
+    packageReference: null,
+    pendingPackageCleanup: [],
     lastLocalConfig: null,
     approvedStudyOrigins: null,
     expansionController: null,
     expanded: false,
+    suspendAutoSave: false,
+    cleanupPending: false,
   };
 
   function byId(id) {
@@ -56,6 +63,7 @@
       tool: "window",
       center: null,
       width: null,
+      storageMode: null,
     };
   }
 
@@ -75,6 +83,7 @@
       tool: "window",
       center: null,
       width: null,
+      storageMode: null,
     };
   }
 
@@ -102,6 +111,12 @@
       tool: VALID_TOOLS.has(candidate.tool) ? candidate.tool : "window",
       center: asFiniteNumber(candidate.center),
       width: asFiniteNumber(candidate.width),
+      storageMode: sourceType === "local" && candidate.storageMode === PRESENTATION_STORAGE_MODE
+        ? PRESENTATION_STORAGE_MODE
+        : null,
+      legacyCacheOnly: sourceType === "local"
+        && candidate.storageMode !== PRESENTATION_STORAGE_MODE
+        && (candidate.legacyCacheOnly === true || Number(candidate.schemaVersion || 0) < SCHEMA_VERSION),
     };
 
     if (result.width != null) result.width = Math.max(1, result.width);
@@ -321,6 +336,7 @@
       tool: config.tool,
       center: config.center,
       width: config.width,
+      storageMode: config.storageMode,
     };
   }
 
@@ -345,31 +361,55 @@
     return Boolean(global.Office && typeof global.Office.onReady === "function");
   }
 
+  function setOfficeSetting(settings, key, value, removeWhenEmpty = false) {
+    const empty = value == null || (removeWhenEmpty && Array.isArray(value) && value.length === 0);
+    if (!empty) settings.set(key, value);
+    else if (typeof settings.remove === "function") settings.remove(key);
+    else settings.set(key, null);
+  }
+
   function saveNow(options = {}) {
-    const config = serializeConfig();
+    const config = options.config ? normalizeConfig(options.config) : serializeConfig();
+    const packageReference = Object.prototype.hasOwnProperty.call(options, "packageReference")
+      ? options.packageReference
+      : runtime.packageReference;
+    const pendingPackageCleanup = Object.prototype.hasOwnProperty.call(options, "pendingPackageCleanup")
+      ? options.pendingPackageCleanup
+      : runtime.pendingPackageCleanup;
     if (!runtime.officeConnected || !global.Office?.context?.document?.settings) {
       if (!hasOfficeRuntime()) saveLocalPreview(config);
       return Promise.resolve(!hasOfficeRuntime());
     }
 
     return new Promise((resolve) => {
+      let settings = null;
+      let previous = null;
       try {
-        const settings = global.Office.context.document.settings;
+        settings = global.Office.context.document.settings;
+        previous = new Map([
+          [SETTINGS_KEY, settings.get(SETTINGS_KEY)],
+          [PACKAGE_REFERENCE_KEY, settings.get(PACKAGE_REFERENCE_KEY)],
+          [PACKAGE_CLEANUP_KEY, settings.get(PACKAGE_CLEANUP_KEY)],
+        ]);
         settings.set(SETTINGS_KEY, config);
+        setOfficeSetting(settings, PACKAGE_REFERENCE_KEY, packageReference);
+        setOfficeSetting(settings, PACKAGE_CLEANUP_KEY, pendingPackageCleanup, true);
         settings.saveAsync((result) => {
           if (result.status === global.Office.AsyncResultStatus.Failed) {
+            previous.forEach((value, key) => setOfficeSetting(settings, key, value));
             setStatus(`Could not save the slide state: ${result.error.message}`);
             resolve(false);
           } else {
             if (options.announce !== false) {
               setStatus(config.sourceType === "local"
-                ? "State saved to the slide; pixels remain in this device's local cache."
+                ? "Study and viewer state saved in this presentation."
                 : "State saved to the slide.");
             }
             resolve(true);
           }
         });
       } catch (error) {
+        previous?.forEach((value, key) => setOfficeSetting(settings, key, value));
         setStatus(`Could not save the slide state: ${error.message}`);
         resolve(false);
       }
@@ -377,6 +417,7 @@
   }
 
   function scheduleSave() {
+    if (runtime.suspendAutoSave) return;
     global.clearTimeout(runtime.saveTimer);
     runtime.saveTimer = global.setTimeout(() => { saveNow(); }, 250);
   }
@@ -391,6 +432,40 @@
     } catch (_) {
       return null;
     }
+  }
+
+  function loadOfficePackageReference() {
+    const settings = global.Office?.context?.document?.settings;
+    if (!settings) return null;
+    const stored = settings.get(PACKAGE_REFERENCE_KEY);
+    if (stored == null || stored === "") return null;
+    let value;
+    try {
+      value = typeof stored === "string" ? JSON.parse(stored) : stored;
+    } catch (_) {
+      throw new Error("The embedded DICOM package reference is invalid.");
+    }
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      throw new Error("The embedded DICOM package reference is invalid.");
+    }
+    return value;
+  }
+
+  function loadOfficeCleanupReferences() {
+    const settings = global.Office?.context?.document?.settings;
+    if (!settings) return [];
+    const stored = settings.get(PACKAGE_CLEANUP_KEY);
+    if (stored == null || stored === "") return [];
+    let value;
+    try {
+      value = typeof stored === "string" ? JSON.parse(stored) : stored;
+    } catch (_) {
+      throw new Error("The embedded DICOM cleanup journal is invalid.");
+    }
+    if (!Array.isArray(value) || value.some((entry) => !entry || typeof entry !== "object" || Array.isArray(entry))) {
+      throw new Error("The embedded DICOM cleanup journal is invalid.");
+    }
+    return value;
   }
 
   function setSettingsOpen(open) {
@@ -422,7 +497,7 @@
   function updateLocalSourceSummary(config) {
     const study = registeredStudy(config.studyId);
     if (!study) {
-      runtime.elements.localSourceSummary.textContent = `${config.studyId}. The package will be restored from the local cache when needed.`;
+      runtime.elements.localSourceSummary.textContent = `${config.studyId}. The package will be restored from this presentation.`;
       return;
     }
     const images = Array.isArray(study.series) ? study.series.reduce((sum, item) => sum + Number(item.slices || 0), 0) : 0;
@@ -440,7 +515,7 @@
     runtime.elements.studyUrl.required = isRemote;
     runtime.elements.studyId.disabled = !isRemote;
     runtime.elements.studyUrl.disabled = !isRemote;
-    if (customOption) customOption.textContent = isLocal ? "Study imported on this device" : "Custom package (HTTPS)";
+    if (customOption) customOption.textContent = isLocal ? "Study stored in this presentation" : "Custom package (HTTPS)";
     if (isLocal) updateLocalSourceSummary(config);
   }
 
@@ -558,7 +633,9 @@
     runtime.elements.emptyState.hidden = true;
     syncForm(normalized);
     updateToolbar({ mode: normalized.mode, activeTool: normalized.tool, seriesOptions: [] });
-    setLoading(normalized.sourceType === "local" ? "Restoring the converted study from the local cache…" : "Loading study and pixels…");
+    setLoading(normalized.sourceType === "local"
+      ? runtime.officeConnected ? "Restoring the study from this presentation…" : "Restoring the converted study from the local cache…"
+      : "Loading study and pixels…");
     setStatus("Loading slide content…");
 
     try {
@@ -592,7 +669,9 @@
       updateToolbar(viewer.getState?.() || {});
       clearLoading();
       if (normalized.sourceType === "local") {
-        setStatus("Viewer ready; pixels are in this device's local cache.");
+        setStatus(runtime.officeConnected
+          ? "Viewer ready; the interactive study is stored in this presentation."
+          : "Viewer ready; pixels are in this browser's local cache.");
       } else {
         setStatus(runtime.officeConnected ? "Viewer ready; state saved to the slide." : "Browser preview; open in PowerPoint to save state to the slide.");
       }
@@ -661,6 +740,138 @@
     );
   }
 
+  function requirePresentationStorage() {
+    const storage = global.DicomSlidesPresentationStorage;
+    if (!storage?.isSupported?.()) {
+      throw new Error("Embedding DICOM studies requires PowerPointApi 1.7 or later.");
+    }
+    return storage;
+  }
+
+  function reportPresentationRestore(detail) {
+    const message = detail?.message || "Restoring study from presentation…";
+    setLoading(message);
+    setStatus(message);
+  }
+
+  async function cacheAndRegisterPackage(packageRecord) {
+    await global.DicomSlidesImporter.registerPackage(packageRecord);
+    await global.DicomSlidesImporter.storePackage(packageRecord).catch(() => false);
+    return packageRecord;
+  }
+
+  function referenceIdentity(reference) {
+    return String(reference?.namespaceUri || "");
+  }
+
+  function withPendingCleanup(references, ...additions) {
+    const unique = new Map();
+    [...(references || []), ...additions.flat()].forEach((reference) => {
+      const identity = referenceIdentity(reference);
+      if (identity) unique.set(identity, reference);
+    });
+    return Array.from(unique.values());
+  }
+
+  async function retryPendingPackageCleanup(options = {}) {
+    if (!runtime.pendingPackageCleanup.length) return [];
+    const storage = requirePresentationStorage();
+    const activeIdentity = referenceIdentity(runtime.packageReference);
+    const remaining = [];
+    const failures = [];
+    for (const reference of runtime.pendingPackageCleanup) {
+      if (referenceIdentity(reference) === activeIdentity) continue;
+      try {
+        await storage.deletePackage(reference);
+        if (reference.studyId && reference.studyId !== runtime.packageReference?.studyId) {
+          await global.DicomSlidesImporter?.deletePackage(reference.studyId);
+        }
+      } catch (error) {
+        remaining.push(reference);
+        failures.push(error);
+      }
+    }
+    const changed = remaining.length !== runtime.pendingPackageCleanup.length;
+    runtime.pendingPackageCleanup = remaining;
+    if (changed && options.persist !== false) {
+      await saveNow({ announce: false });
+    }
+    return failures;
+  }
+
+  function reportPendingCleanup(failures) {
+    runtime.cleanupPending = failures.length > 0;
+    if (!runtime.cleanupPending) return false;
+    const message = "PowerPoint could not remove a discarded embedded DICOM package yet. Reopen the add-in to retry before sharing this presentation.";
+    setLoading(message, true);
+    setStatus("Embedded DICOM package removal is pending.");
+    return true;
+  }
+
+  async function restoreLocalPackage(config) {
+    const storage = requirePresentationStorage();
+    if (runtime.packageReference) {
+      if (runtime.packageReference.studyId !== config.studyId) {
+        throw new Error("The embedded package reference belongs to a different study.");
+      }
+      const packageRecord = await storage.readPackage(runtime.packageReference, {
+        onProgress: reportPresentationRestore,
+      });
+      if (config.storageMode !== PRESENTATION_STORAGE_MODE) {
+        runtime.config = normalizeConfig(Object.assign({}, config, { storageMode: PRESENTATION_STORAGE_MODE }));
+        const saved = await saveNow({ announce: false });
+        if (!saved) throw new Error("PowerPoint could not upgrade the embedded DICOM package reference.");
+      }
+      return cacheAndRegisterPackage(packageRecord);
+    }
+
+    if (!config.legacyCacheOnly) {
+      throw new Error("The embedded DICOM package reference is missing or invalid.");
+    }
+
+    const cachedPackage = await global.DicomSlidesImporter.loadPackage(config.studyId);
+    if (!cachedPackage) {
+      throw new Error(
+        "This presentation was created before DICOM studies were embedded in the PPTX, and its old local cache is unavailable. Import the DICOM study again.",
+      );
+    }
+
+    const migratedReference = await storage.writePackage(cachedPackage, {
+      onProgress: reportPresentationRestore,
+    });
+    const previousConfig = runtime.config;
+    runtime.packageReference = migratedReference;
+    runtime.config = normalizeConfig(Object.assign({}, config, { storageMode: PRESENTATION_STORAGE_MODE }));
+    const saved = await saveNow({ announce: false });
+    if (!saved) {
+      runtime.packageReference = null;
+      runtime.config = previousConfig;
+      runtime.pendingPackageCleanup = withPendingCleanup(runtime.pendingPackageCleanup, migratedReference);
+      const cleanupJournalSaved = await saveNow({
+        announce: false,
+        config: previousConfig,
+        packageReference: null,
+      });
+      if (cleanupJournalSaved) {
+        const cleanupFailures = await retryPendingPackageCleanup();
+        if (cleanupFailures.length) {
+          throw new Error("PowerPoint could not save the embedded DICOM package reference, and removal of the incomplete package is pending.");
+        }
+      } else {
+        try {
+          await storage.deletePackage(migratedReference);
+          runtime.pendingPackageCleanup = runtime.pendingPackageCleanup.filter(
+            (reference) => referenceIdentity(reference) !== referenceIdentity(migratedReference),
+          );
+        } catch (cleanupError) {
+          throw new Error(`PowerPoint could not save the embedded DICOM package reference. Cleanup also failed: ${cleanupError.message}`);
+        }
+      }
+      throw new Error("PowerPoint could not save the embedded DICOM package reference.");
+    }
+    return cacheAndRegisterPackage(cachedPackage);
+  }
+
   async function connectOffice(info) {
     const host = info?.host;
     const powerPointHost = global.Office?.HostType?.PowerPoint;
@@ -678,30 +889,43 @@
     runtime.officeConnected = true;
     document.body.classList.add("office-connected");
     const saved = loadOfficeConfig();
-    if (saved && normalizeConfig(saved).sourceType !== "empty") {
-      runtime.config = normalizeConfig(saved);
-      try {
+    try {
+      runtime.packageReference = loadOfficePackageReference();
+      runtime.pendingPackageCleanup = loadOfficeCleanupReferences();
+      if (saved && normalizeConfig(saved).sourceType !== "empty") {
+        runtime.config = normalizeConfig(saved);
+        if (runtime.config.sourceType === "local") await restoreLocalPackage(runtime.config);
         await renderViewer(runtime.config, { persist: false });
+        reportPendingCleanup(await retryPendingPackageCleanup());
         setSettingsOpen(false);
-      } catch (error) {
+      } else {
+        showEmptyState({ persist: false });
+        reportPendingCleanup(await retryPendingPackageCleanup());
+      }
+    } catch (error) {
+      if (saved && normalizeConfig(saved).sourceType !== "empty") {
         showEmptyState({
-          config: runtime.config,
+          config: normalizeConfig(saved),
           title: "Study data is unavailable",
           message: error.message || "Import this study again to restore its pixels.",
-          status: "The slide state was found, but the local study cache is unavailable.",
+          status: "The slide state was found, but its embedded study could not be restored.",
+          persist: false,
+        });
+      } else {
+        showEmptyState({
+          title: "Presentation storage needs attention",
+          message: error.message || "The presentation cleanup journal could not be read.",
           persist: false,
         });
       }
-    } else {
-      showEmptyState({ persist: false });
     }
     applyOfficeView(await getActiveView());
     registerActiveViewChanged();
     await runtime.expansionController?.prepare?.();
     await runtime.expansionController?.initialize();
-    if (runtime.viewer) {
+    if (runtime.viewer && !runtime.cleanupPending) {
       setStatus(runtime.config?.sourceType === "local"
-        ? "Connected to PowerPoint; state is in the slide and pixels are in the local cache."
+        ? "Connected to PowerPoint; the interactive study is stored in this presentation."
         : "Connected to PowerPoint; state is stored in this slide.");
     }
   }
@@ -736,6 +960,16 @@
       setLoading("The DICOM import module did not load.", true);
       return;
     }
+    let presentationStorage = null;
+    if (runtime.officeConnected) {
+      try {
+        presentationStorage = requirePresentationStorage();
+      } catch (error) {
+        setLoading(error.message || String(error), true);
+        setStatus("This PowerPoint version cannot embed DICOM studies.");
+        return;
+      }
+    }
 
     if (runtime.importAbortController) runtime.importAbortController.abort();
     const controller = new AbortController();
@@ -746,17 +980,37 @@
     runtime.elements.importProgressBar.value = 0;
     runtime.elements.importProgressText.textContent = "Preparing files…";
     setLoading("Preparing DICOM import…");
+    const previousConfig = runtime.config ? normalizeConfig(runtime.config) : emptyConfig();
+    const previousReference = runtime.packageReference;
+    const previousPendingCleanup = runtime.pendingPackageCleanup.slice();
+    let embeddedReference = null;
+    let referenceSaved = false;
 
     try {
       const result = await global.DicomSlidesImporter.importFiles(selected, {
         chunkSize: 12,
-        persist: true,
+        persist: !presentationStorage,
+        register: !presentationStorage,
         signal: controller.signal,
         onProgress: (detail) => {
-          if (isCurrentImport()) updateImportProgress(detail);
+          if (isCurrentImport()) updateImportProgress(Object.assign({}, detail, {
+            progress: (Number(detail.progress) || 0) * (presentationStorage ? 0.9 : 1),
+          }));
         },
       });
       if (!isCurrentImport()) return;
+      if (presentationStorage) {
+        if (!result.package) throw new Error("The DICOM importer did not return a package to embed.");
+        embeddedReference = await presentationStorage.writePackage(result.package, {
+          signal: controller.signal,
+          onProgress: (detail) => {
+            if (isCurrentImport()) updateImportProgress(Object.assign({}, detail, {
+              progress: 0.9 + (Number(detail.progress) || 0) * 0.09,
+            }));
+          },
+        });
+        if (!isCurrentImport()) throw new DOMException("Import canceled.", "AbortError");
+      }
       const firstSeries = result.study.series[0];
       const config = normalizeConfig({
         sourceType: "local",
@@ -770,22 +1024,58 @@
         tool: "window",
         center: null,
         width: null,
+        storageMode: presentationStorage ? PRESENTATION_STORAGE_MODE : null,
       });
+      runtime.packageReference = embeddedReference;
+      runtime.pendingPackageCleanup = previousReference
+        ? withPendingCleanup(previousPendingCleanup, previousReference)
+        : previousPendingCleanup;
       runtime.config = config;
       syncForm(config);
+      const slideStateSaved = await saveNow({ announce: false });
+      referenceSaved = slideStateSaved;
+      if (!slideStateSaved) throw new Error("PowerPoint could not save the embedded DICOM package reference.");
+      if (!isCurrentImport()) return;
+      if (presentationStorage) await cacheAndRegisterPackage(result.package);
       await renderViewer(config, { persist: false });
       if (!isCurrentImport()) return;
-      const slideStateSaved = await saveNow({ announce: false });
-      if (!isCurrentImport()) return;
+      const cleanupFailures = await retryPendingPackageCleanup();
+      reportPendingCleanup(cleanupFailures);
       setSettingsOpen(false);
       runtime.elements.importProgress.hidden = true;
-      const cacheText = result.persisted ? "stored in the local cache" : "available only for this session";
-      const saveText = runtime.officeConnected
-        ? slideStateSaved ? " Slide state saved." : " Slide state could not be saved."
-        : "";
+      const persistenceText = runtime.officeConnected
+        ? "embedded in this presentation"
+        : result.persisted ? "stored in the local cache" : "available only for this session";
       const warningText = result.warnings.length ? ` ${result.warnings.length} review warning(s).` : "";
-      setStatus(`Imported: ${result.study.seriesCount} series, ${formatBytes(result.totalCompressedBytes)} compressed; ${cacheText}.${saveText}${warningText}`);
+      if (!cleanupFailures.length) {
+        setStatus(`Imported: ${result.study.seriesCount} series, ${formatBytes(result.totalCompressedBytes)} compressed; ${persistenceText}.${warningText}`);
+      }
     } catch (error) {
+      if (!embeddedReference && error?.cleanupReference) embeddedReference = error.cleanupReference;
+      if (embeddedReference && !referenceSaved) {
+        runtime.packageReference = previousReference;
+        runtime.config = previousConfig;
+        runtime.pendingPackageCleanup = withPendingCleanup(previousPendingCleanup, embeddedReference);
+        syncForm(previousConfig);
+        const cleanupJournalSaved = await saveNow({
+          announce: false,
+          config: previousConfig,
+          packageReference: previousReference,
+        });
+        if (cleanupJournalSaved) {
+          const cleanupFailures = await retryPendingPackageCleanup();
+          if (cleanupFailures.length) {
+            error = new Error(`${error.message} The incomplete embedded package is queued for cleanup.`);
+          }
+        } else {
+          try {
+            await presentationStorage.deletePackage(embeddedReference);
+            runtime.pendingPackageCleanup = previousPendingCleanup;
+          } catch (cleanupError) {
+            error = new Error(`${error.message} Cleanup also failed: ${cleanupError.message}`);
+          }
+        }
+      }
       if (!isCurrentImport()) return;
       if (error?.name === "AbortError") {
         clearLoading();
@@ -793,7 +1083,7 @@
         runtime.elements.importProgressText.textContent = "Import canceled.";
       } else {
         setLoading(error.message || String(error), true);
-        setStatus("Failed to convert the DICOM files.");
+        setStatus("Failed to import the DICOM study.");
         runtime.elements.importProgressText.textContent = error.message || String(error);
       }
     } finally {
@@ -919,15 +1209,42 @@
       syncForm(runtime.config);
       renderViewer(runtime.config).catch((error) => setLoading(error.message, true));
     });
-    runtime.elements.settingsForm.addEventListener("submit", (event) => {
+    runtime.elements.settingsForm.addEventListener("submit", async (event) => {
       event.preventDefault();
+      const previousConfig = runtime.config ? normalizeConfig(runtime.config) : emptyConfig();
+      const previousReference = runtime.packageReference;
+      const previousPendingCleanup = runtime.pendingPackageCleanup.slice();
+      const previousLastLocalConfig = runtime.lastLocalConfig;
+      let stateSaved = false;
+      runtime.suspendAutoSave = true;
       try {
         const config = readFormConfig();
         validateStudySource(config);
         setSettingsOpen(false);
-        renderViewer(config).catch((error) => setLoading(error.message, true));
+        await renderViewer(config, { persist: false });
+        const retiredReference = config.sourceType !== "local" ? previousReference : null;
+        runtime.packageReference = retiredReference ? null : previousReference;
+        runtime.pendingPackageCleanup = retiredReference
+          ? withPendingCleanup(previousPendingCleanup, retiredReference)
+          : previousPendingCleanup;
+        const saved = await saveNow({ announce: false, config });
+        if (!saved) {
+          throw new Error("PowerPoint could not save the new slide state.");
+        }
+        stateSaved = true;
+        if (retiredReference) runtime.lastLocalConfig = null;
+        reportPendingCleanup(await retryPendingPackageCleanup());
       } catch (error) {
+        if (!stateSaved) {
+          runtime.config = previousConfig;
+          runtime.packageReference = previousReference;
+          runtime.pendingPackageCleanup = previousPendingCleanup;
+          runtime.lastLocalConfig = previousLastLocalConfig;
+          await renderViewer(previousConfig, { persist: false }).catch(() => null);
+        }
         setLoading(error.message || String(error), true);
+      } finally {
+        runtime.suspendAutoSave = false;
       }
     });
 
@@ -967,17 +1284,46 @@
 
     runtime.elements.useRemoteSourceButton.addEventListener("click", () => {
       runtime.lastLocalConfig = null;
-      runtime.config = remoteCustomConfig();
-      syncForm(runtime.config);
+      syncForm(remoteCustomConfig());
       runtime.elements.studyId.focus();
     });
     runtime.elements.removeLocalSourceButton.addEventListener("click", async () => {
-      const studyId = runtime.config?.sourceType === "local" ? runtime.config.studyId : null;
-      runtime.lastLocalConfig = null;
-      if (studyId && global.DicomSlidesImporter) await global.DicomSlidesImporter.deletePackage(studyId);
-      showEmptyState({ persist: false });
-      await saveNow({ announce: false });
-      setStatus("The cached study was removed. Import a study to continue.");
+      const previousConfig = runtime.config ? normalizeConfig(runtime.config) : emptyConfig();
+      const previousReference = runtime.packageReference;
+      const previousPendingCleanup = runtime.pendingPackageCleanup.slice();
+      const previousLastLocalConfig = runtime.lastLocalConfig;
+      let stateSaved = false;
+      try {
+        const config = emptyConfig();
+        runtime.config = config;
+        runtime.packageReference = null;
+        runtime.pendingPackageCleanup = previousReference
+          ? withPendingCleanup(previousPendingCleanup, previousReference)
+          : previousPendingCleanup;
+        const saved = await saveNow({
+          announce: false,
+          config,
+          packageReference: null,
+        });
+        if (!saved) throw new Error("PowerPoint could not save the empty slide state.");
+        stateSaved = true;
+        showEmptyState({ persist: false });
+        runtime.lastLocalConfig = null;
+        const cleanupFailures = await retryPendingPackageCleanup();
+        if (!reportPendingCleanup(cleanupFailures)) {
+          setStatus("The study was removed from this presentation.");
+        }
+      } catch (error) {
+        if (!stateSaved) {
+          runtime.config = previousConfig;
+          runtime.packageReference = previousReference;
+          runtime.pendingPackageCleanup = previousPendingCleanup;
+          runtime.lastLocalConfig = previousLastLocalConfig;
+          syncForm(previousConfig);
+        }
+        setLoading(error.message || String(error), true);
+        setStatus("Could not remove the study from this presentation.");
+      }
     });
 
     global.addEventListener("beforeunload", () => {
@@ -1087,7 +1433,7 @@
   }
 
   global.DicomSlidesPowerPointAddin = Object.freeze({
-    version: "1.1.0",
+    version: "1.3.0",
     normalizeConfig,
     validateStudySource,
     renderViewer,

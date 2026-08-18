@@ -4,7 +4,7 @@ set -euo pipefail
 
 readonly ADDIN_ID="3c8d5463-e606-4e35-86de-515114b31089"
 readonly EXPECTED_SOURCE_URL="https://thalesmms.github.io/dicom-slides/powerpoint/content.html"
-readonly EXPECTED_MANIFEST_SHA256="376053c2827a2b08ebfcd5eba762eb884f49e3793311349ed7076b9ccc93c9d3"
+readonly EXPECTED_MANIFEST_SHA256="0ba89340b76f46a83edc3704ac1a389362a9b9cd9fab093d3678fba17657a280"
 readonly DEFAULT_MANIFEST_SOURCE="https://raw.githubusercontent.com/ThalesMMS/dicom-slides/main/powerpoint/manifest.xml"
 
 manifest_source="$DEFAULT_MANIFEST_SOURCE"

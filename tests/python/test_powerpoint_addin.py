@@ -62,6 +62,16 @@ class PowerPointAddinTests(unittest.TestCase):
             "Import DICOM and view interactive 2D stacks, MPR, and 3D volume rendering in PowerPoint slides.",
         )
 
+    def test_manifest_requires_embedded_presentation_storage_api(self) -> None:
+        root = ET.parse(ROOT / "powerpoint" / "manifest.xml").getroot()
+        requirement = root.find(
+            "o:Requirements/o:Sets/o:Set",
+            {"o": VALIDATOR.NAMESPACE},
+        )
+        self.assertIsNotNone(requirement)
+        self.assertEqual(requirement.attrib.get("Name"), "PowerPointApi")
+        self.assertEqual(requirement.attrib.get("MinVersion"), "1.7")
+
     def test_html_and_scripts(self) -> None:
         VALIDATOR.validate_html_and_scripts()
 
@@ -119,6 +129,7 @@ class PowerPointAddinTests(unittest.TestCase):
     def test_powerpoint_uses_one_compact_viewer_toolbar(self) -> None:
         html = (ROOT / "powerpoint" / "content.html").read_text(encoding="utf-8")
         self.assertEqual(html.count('class="viewer-toolbar"'), 1)
+        self.assertIn('<script src="presentation-storage.js"></script>', html)
         self.assertIn('<script src="powerpoint-host.js"></script>', html)
         for control_id in (
             "importButton",

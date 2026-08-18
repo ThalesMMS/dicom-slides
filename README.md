@@ -44,6 +44,10 @@ manifest; no DICOM files are uploaded during installation or import.
 5. Open the add-in's gear menu and choose **Files**, **Folder**, or **ZIP** to
    import an exam locally.
 
+The complete converted study is stored inside the presentation. Downloading or
+copying the `.pptx` carries the interactive case to supported PowerPoint desktop
+and web clients; IndexedDB is used only as a local performance cache.
+
 If **Upload My Add-in** is missing, your Microsoft 365 organization may have
 disabled custom add-ins. Ask its administrator or use a personal account that
 allows sideloading.
@@ -55,13 +59,13 @@ checks its published SHA-256, then installs or updates only the DICOM Slides
 manifest. It does not require `sudo` and preserves other add-ins.
 
 ```console
-installer="$(mktemp -t dicom-slides-install)" && curl --proto '=https' --tlsv1.2 -fsSLo "$installer" https://raw.githubusercontent.com/ThalesMMS/dicom-slides/main/scripts/install-powerpoint-macos.sh && printf '%s  %s\n' '2cdc6a3dadc12ce0374439608978d2cf4c768e87a47390e1dcc51d462bd3b942' "$installer" | shasum -a 256 -c - && bash "$installer"
+installer="$(mktemp -t dicom-slides-install)" && curl --proto '=https' --tlsv1.2 -fsSLo "$installer" https://raw.githubusercontent.com/ThalesMMS/dicom-slides/main/scripts/install-powerpoint-macos.sh && printf '%s  %s\n' '5a881a92167e025c430021c735de4221274c93431e1abc9acb8faa0fc86c0319' "$installer" | shasum -a 256 -c - && bash "$installer"
 ```
 
 To remove only DICOM Slides, download the same script and pass `--uninstall`:
 
 ```console
-installer="$(mktemp -t dicom-slides-install)" && curl --proto '=https' --tlsv1.2 -fsSLo "$installer" https://raw.githubusercontent.com/ThalesMMS/dicom-slides/main/scripts/install-powerpoint-macos.sh && printf '%s  %s\n' '2cdc6a3dadc12ce0374439608978d2cf4c768e87a47390e1dcc51d462bd3b942' "$installer" | shasum -a 256 -c - && bash "$installer" --uninstall
+installer="$(mktemp -t dicom-slides-install)" && curl --proto '=https' --tlsv1.2 -fsSLo "$installer" https://raw.githubusercontent.com/ThalesMMS/dicom-slides/main/scripts/install-powerpoint-macos.sh && printf '%s  %s\n' '5a881a92167e025c430021c735de4221274c93431e1abc9acb8faa0fc86c0319' "$installer" | shasum -a 256 -c - && bash "$installer" --uninstall
 ```
 
 ### Manual installation for PowerPoint on macOS
@@ -89,7 +93,7 @@ the manifest, saves it in Downloads, and opens PowerPoint for the web. Office
 still requires you to complete the **Upload My Add-in** step yourself.
 
 ```powershell
-$installer = Join-Path $env:TEMP ("dicom-slides-install-" + [guid]::NewGuid().ToString("N") + ".ps1"); $expected = "7bbe39aef6a7ebfc2a03eda8bc47d1db7ad2b6e74c27328bbff3e2905006101b"; Invoke-WebRequest "https://raw.githubusercontent.com/ThalesMMS/dicom-slides/main/scripts/install-powerpoint-windows.ps1" -OutFile $installer; if ((Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash.ToLowerInvariant() -ne $expected) { Remove-Item -LiteralPath $installer -Force; throw "DICOM Slides installer checksum mismatch" }; powershell.exe -NoProfile -ExecutionPolicy Bypass -File $installer
+$installer = Join-Path $env:TEMP ("dicom-slides-install-" + [guid]::NewGuid().ToString("N") + ".ps1"); $expected = "2292cdf066e961a48745db03affa80a2485271701bc745367b5da23b40c135a3"; Invoke-WebRequest "https://raw.githubusercontent.com/ThalesMMS/dicom-slides/main/scripts/install-powerpoint-windows.ps1" -OutFile $installer; if ((Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash.ToLowerInvariant() -ne $expected) { Remove-Item -LiteralPath $installer -Force; throw "DICOM Slides installer checksum mismatch" }; powershell.exe -NoProfile -ExecutionPolicy Bypass -File $installer
 ```
 
 Windows desktop sideloading requires a trusted add-in catalog and may require

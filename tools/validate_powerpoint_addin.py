@@ -142,6 +142,14 @@ def validate_manifest() -> None:
     host = root.find("o:Hosts/o:Host", NS)
     require(host is not None and host.attrib.get("Name") == "Presentation", "PowerPoint Presentation host is required")
 
+    requirement = root.find("o:Requirements/o:Sets/o:Set", NS)
+    require(
+        requirement is not None
+        and requirement.attrib.get("Name") == "PowerPointApi"
+        and requirement.attrib.get("MinVersion") == "1.7",
+        "PowerPointApi 1.7 is required for embedded presentation storage",
+    )
+
     settings = root.find("o:DefaultSettings", NS)
     require(settings is not None, "manifest is missing DefaultSettings")
     source = settings.find("o:SourceLocation", NS)
@@ -176,6 +184,7 @@ def validate_html_and_scripts() -> None:
         "studies.js",
         "vendor/openjpeg/openjpegwasm_decode.js",
         "dicom-importer.js",
+        "presentation-storage.js",
         "powerpoint-host.js",
         "content.js",
     )
@@ -195,6 +204,7 @@ def validate_html_and_scripts() -> None:
         "content.js",
         "studies.js",
         "dicom-importer.js",
+        "presentation-storage.js",
         "powerpoint-host.js",
         "vendor/openjpeg/openjpegwasm_decode.js",
         "vendor/openjpeg/openjpegwasm_decode.wasm",
@@ -217,10 +227,27 @@ def validate_html_and_scripts() -> None:
         ("ensureRegistered call", contains_token_sequence(tokens, ("DicomSlidesImporter", ".", "ensureRegistered", "("))),
         ("PowerPoint add-in export", contains_token_sequence(tokens, ("global", ".", "DicomSlidesPowerPointAddin", "="))),
         ("local protocol handling", has_string_comparison(tokens, "resolved", "protocol", "dicom-slides-local:")),
+        ("embedded storage marker", "PRESENTATION_STORAGE_MODE" in javascript),
+        ("persistent cleanup journal", "PACKAGE_CLEANUP_KEY" in javascript),
     )
     for label, present in contracts:
         require(present, f"content.js is missing required integration {label!r}")
     require(not contains_token_sequence(tokens, ("eval", "(")), "content.js must not use eval")
+
+    storage = (POWERPOINT / "presentation-storage.js").read_text(encoding="utf-8")
+    for token in (
+        "PowerPointApi",
+        "1.7",
+        "customXmlParts",
+        "getByNamespace",
+        "SHA-256",
+        "writePackage",
+        "readPackage",
+        "deletePackage",
+    ):
+        require(token in storage, f"presentation-storage.js is missing {token!r}")
+    require("eval(" not in storage, "presentation-storage.js must not use eval")
+    require("Function(" not in storage, "presentation-storage.js must not construct dynamic functions")
 
 
 def validate_importer() -> None:
@@ -256,8 +283,11 @@ def validate_documentation() -> None:
         "manifest.xml",
         "GitHub Pages",
         "Office.context.document.settings",
+        "PowerPoint.presentation.customXmlParts",
+        "embedded in the `.pptx`",
+        "PowerPointApi 1.7",
         "IndexedDB",
-        "not embedded into the `.pptx`",
+        "cache only",
         "Implicit VR Little Endian",
         "CompressionStream",
         "JPEG 2000",

@@ -27,6 +27,7 @@ powerpoint/
   content.css           responsive slide UI
   content.js            Office.js integration and state persistence
   dicom-importer.js     browser-side DICOM/ZIP parser and chunk converter
+  presentation-storage.js  embedded PPTX package storage and verification
   studies.js            built-in study catalog
   assets/               add-in icons
 ```
@@ -53,7 +54,8 @@ selected DICOM files or ZIP
   -> gzip each chunk with `CompressionStream('gzip')`
   -> encode the compressed payload as base64
   -> register study, manifests, and chunks in DICOM Slides
-  -> store the converted package in IndexedDB when available
+  -> embed the complete converted package in the PowerPoint presentation
+  -> cache the converted package in IndexedDB when available
 ```
 
 The viewer then uses the normal lazy-loading behavior:
@@ -98,8 +100,8 @@ skipped with a codec-specific reason. Use the repository's offline
 
 ## Persistence model
 
-The converted pixel package is **not embedded into the `.pptx` in this
-version**.
+The complete converted pixel package is **embedded in the `.pptx`**. Downloading,
+copying, or reopening the presentation carries the interactive study with it.
 
 The content-add-in instance stores the following small configuration through
 `Office.context.document.settings`:
@@ -112,25 +114,37 @@ The content-add-in instance stores the following small configuration through
 - active tool;
 - window center and width.
 
-The converted manifests and gzip/base64 chunks are stored in **IndexedDB** for
-the add-in origin. Consequently:
+The converted study, manifests, gzip/base64 chunks, warnings, and byte counts
+are split across presentation-level `PowerPoint.presentation.customXmlParts`.
+Every part and the reconstructed package have SHA-256 digests. The add-in reads
+the newly stored XML back from PowerPoint and verifies every digest before it
+saves the active reference. Import succeeds only after that verification and
+the settings transaction complete. PowerPointApi 1.7 is declared as a manifest
+requirement because custom XML presentation storage is mandatory for this
+add-in.
 
-- reopening the presentation on the same device, Office profile, and add-in
-  origin can restore the imported exam without reconversion;
-- clearing browser/Office webview storage removes the local exam cache;
-- opening the `.pptx` on another computer does not transfer the pixels;
-- when the cache is missing, the add-in asks the user to import the DICOM files
-  again;
-- if IndexedDB is unavailable or its quota is exceeded, the imported exam
-  remains usable for the current session but is not restorable later.
+Replacement and removal are commit-first operations: the new slide state is
+saved before an old package is deleted. A small cleanup journal retains any
+generation that PowerPoint could not delete and retries it the next time the
+add-in opens, so hidden pixel packages do not lose their last reference. Until
+that deletion succeeds, the add-in visibly reports that removal is pending.
 
-Inside PowerPoint, `Office.context.document.settings` is the only authority for
-the study assigned to the slide. The add-in waits for Office initialization
-before restoring that state, and it awaits `settings.saveAsync` after a local
-import. Origin-wide `localStorage` is used only by the standalone browser
-preview, never as a PowerPoint fallback. If the slide references a local study
-whose IndexedDB package is missing, the add-in asks for a new import instead of
-silently displaying a demonstration study.
+**IndexedDB is cache only.** Clearing the Office web cache may make the next
+open slower, but it does not remove an exam from a saved presentation. On any
+supported computer, the add-in reconstructs the package from the `.pptx`,
+verifies it, registers it with the viewer, and then refreshes the cache when
+available. A missing, incomplete, or corrupt embedded generation is reported
+instead of being hidden by recipient-local browser data.
+
+Presentations saved by the older cache-only implementation are upgraded
+automatically when opened on the original device while that old IndexedDB copy
+still exists. This fallback is enabled only for configurations without the new
+embedded-storage marker; a new-format presentation with a missing or malformed
+reference is treated as corrupt. Otherwise the original DICOM study must be
+imported once more so the `.pptx` can receive it.
+
+Origin-wide `localStorage` is used only by the standalone browser preview,
+never as a PowerPoint fallback.
 
 `AllowSnapshot` remains enabled in the manifest so compatible PowerPoint
 clients can preserve a static visual fallback. The snapshot is not a
@@ -192,7 +206,7 @@ add-ins.
 Close PowerPoint, open Terminal, and run:
 
 ```console
-installer="$(mktemp -t dicom-slides-install)" && curl --proto '=https' --tlsv1.2 -fsSLo "$installer" https://raw.githubusercontent.com/ThalesMMS/dicom-slides/main/scripts/install-powerpoint-macos.sh && printf '%s  %s\n' '2cdc6a3dadc12ce0374439608978d2cf4c768e87a47390e1dcc51d462bd3b942' "$installer" | shasum -a 256 -c - && bash "$installer"
+installer="$(mktemp -t dicom-slides-install)" && curl --proto '=https' --tlsv1.2 -fsSLo "$installer" https://raw.githubusercontent.com/ThalesMMS/dicom-slides/main/scripts/install-powerpoint-macos.sh && printf '%s  %s\n' '5a881a92167e025c430021c735de4221274c93431e1abc9acb8faa0fc86c0319' "$installer" | shasum -a 256 -c - && bash "$installer"
 ```
 
 The command verifies the downloaded installer against its published SHA-256.
@@ -206,7 +220,7 @@ manifest on update, migrates an earlier DICOM Slides installation named
 To update, run the installation command again. To remove only DICOM Slides:
 
 ```console
-installer="$(mktemp -t dicom-slides-install)" && curl --proto '=https' --tlsv1.2 -fsSLo "$installer" https://raw.githubusercontent.com/ThalesMMS/dicom-slides/main/scripts/install-powerpoint-macos.sh && printf '%s  %s\n' '2cdc6a3dadc12ce0374439608978d2cf4c768e87a47390e1dcc51d462bd3b942' "$installer" | shasum -a 256 -c - && bash "$installer" --uninstall
+installer="$(mktemp -t dicom-slides-install)" && curl --proto '=https' --tlsv1.2 -fsSLo "$installer" https://raw.githubusercontent.com/ThalesMMS/dicom-slides/main/scripts/install-powerpoint-macos.sh && printf '%s  %s\n' '5a881a92167e025c430021c735de4221274c93431e1abc9acb8faa0fc86c0319' "$installer" | shasum -a 256 -c - && bash "$installer" --uninstall
 ```
 
 ### PowerPoint for macOS: manual installation
@@ -232,7 +246,7 @@ installer="$(mktemp -t dicom-slides-install)" && curl --proto '=https' --tlsv1.2
 Paste the following command into PowerShell:
 
 ```powershell
-$installer = Join-Path $env:TEMP ("dicom-slides-install-" + [guid]::NewGuid().ToString("N") + ".ps1"); $expected = "7bbe39aef6a7ebfc2a03eda8bc47d1db7ad2b6e74c27328bbff3e2905006101b"; Invoke-WebRequest "https://raw.githubusercontent.com/ThalesMMS/dicom-slides/main/scripts/install-powerpoint-windows.ps1" -OutFile $installer; if ((Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash.ToLowerInvariant() -ne $expected) { Remove-Item -LiteralPath $installer -Force; throw "DICOM Slides installer checksum mismatch" }; powershell.exe -NoProfile -ExecutionPolicy Bypass -File $installer
+$installer = Join-Path $env:TEMP ("dicom-slides-install-" + [guid]::NewGuid().ToString("N") + ".ps1"); $expected = "2292cdf066e961a48745db03affa80a2485271701bc745367b5da23b40c135a3"; Invoke-WebRequest "https://raw.githubusercontent.com/ThalesMMS/dicom-slides/main/scripts/install-powerpoint-windows.ps1" -OutFile $installer; if ((Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash.ToLowerInvariant() -ne $expected) { Remove-Item -LiteralPath $installer -Force; throw "DICOM Slides installer checksum mismatch" }; powershell.exe -NoProfile -ExecutionPolicy Bypass -File $installer
 ```
 
 The command verifies the downloaded helper against its published SHA-256 and
@@ -260,9 +274,10 @@ Microsoft 365 admin center instead of a per-user script.
   **Clear Web Cache**.
 - **The upload option is missing:** custom add-ins may be blocked by the
   Microsoft 365 account or organization.
-- **A locally imported exam disappeared:** imported packages live in the
-  Office webview's IndexedDB. Clearing the web cache removes those packages;
-  import the original DICOM files or ZIP again.
+- **An older imported exam is unavailable:** presentations created before
+  embedded storage contained only a cache reference. Open it once on the
+  original device to migrate the existing cache, or import the DICOM files/ZIP
+  again. New presentations carry the complete study in the `.pptx`.
 - **Corporate installation:** ask the Microsoft 365 administrator to deploy
   the manifest through **Settings > Integrated apps**.
 
@@ -310,14 +325,16 @@ python tools/validate_powerpoint_addin.py
 node --check powerpoint/content.js
 node --check powerpoint/studies.js
 node --check powerpoint/dicom-importer.js
+node --check powerpoint/presentation-storage.js
 node tests/javascript/test_powerpoint_dicom_importer.js
+node tests/javascript/test_powerpoint_presentation_storage.js
 python -m unittest tests.python.test_powerpoint_addin -v
 ```
 
 The validator checks the content-add-in manifest, production HTTPS URLs,
-snapshot configuration, import controls, script references, local-protocol
-handling, IndexedDB persistence, browser compression APIs, and the absence of
-`eval`.
+snapshot configuration, PowerPointApi 1.7, import controls, script references,
+local-protocol handling, embedded custom XML persistence, IndexedDB caching,
+browser compression APIs, and the absence of `eval`.
 
 ## Deployment notes
 
