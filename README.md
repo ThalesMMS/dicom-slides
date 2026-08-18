@@ -31,11 +31,14 @@ manifest; no DICOM files are uploaded during installation or import.
 
 ### Easiest on macOS or Windows: PowerPoint for the web
 
-1. [Download the DICOM Slides manifest](https://github.com/ThalesMMS/dicom-slides/raw/refs/heads/main/powerpoint/manifest.xml) (Right click -> Save Page As...)
+1. [Download the DICOM Slides manifest](https://github.com/ThalesMMS/dicom-slides/raw/refs/heads/main/powerpoint/manifest.xml) (Right click -> Download Linked File As...) -> save as `manifest.xml`.
 2. Open [PowerPoint for the web](https://powerpoint.cloud.microsoft/) and open
    a presentation.
 3. Choose **Home > Add-ins > More Settings** (shown as **Advanced** in some
    versions).
+
+   <p><img src="docs/images/powerpoint-addins-advanced.png" alt="PowerPoint Add-ins pane with the Advanced option" width="49%" align="middle"> <img src="docs/images/powerpoint-upload-addin-manifest.png" alt="Office Add-ins dialog for uploading the manifest" width="49%" align="middle"></p>
+
 4. Choose **Upload My Add-in**, select the downloaded `manifest.xml`, and then
    insert **DICOM Slides**.
 5. Open the add-in's gear menu and choose **Files**, **Folder**, or **ZIP** to
@@ -60,6 +63,24 @@ To remove only DICOM Slides, download the same script and pass `--uninstall`:
 ```console
 installer="$(mktemp -t dicom-slides-install)" && curl --proto '=https' --tlsv1.2 -fsSLo "$installer" https://raw.githubusercontent.com/ThalesMMS/dicom-slides/main/scripts/install-powerpoint-macos.sh && printf '%s  %s\n' '2cdc6a3dadc12ce0374439608978d2cf4c768e87a47390e1dcc51d462bd3b942' "$installer" | shasum -a 256 -c - && bash "$installer" --uninstall
 ```
+
+### Manual installation for PowerPoint on macOS
+
+1. Close PowerPoint.
+2. [Download the DICOM Slides manifest](https://github.com/ThalesMMS/dicom-slides/raw/refs/heads/main/powerpoint/manifest.xml)
+   and make sure the file is named `manifest.xml`.
+3. Open Terminal and run this command:
+
+   ```console
+   mkdir -p "$HOME/Library/Containers/com.microsoft.Powerpoint/Data/Documents/wef" && open "$HOME/Library/Containers/com.microsoft.Powerpoint/Data/Documents/wef"
+   ```
+
+   This creates the PowerPoint `wef` folder when it does not exist and opens it
+   in Finder.
+4. Move `manifest.xml` into the opened folder and rename it to
+   `dicom-slides.xml`. If that file already exists, replace it to update DICOM
+   Slides; leave every other XML file untouched.
+5. Reopen PowerPoint and choose **Home > Add-ins > DICOM Slides**.
 
 ### One-command helper for Windows
 
