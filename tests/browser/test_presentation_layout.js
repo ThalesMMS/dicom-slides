@@ -12,10 +12,11 @@ const slideIds = [
   "03a-powerpoint-web",
   "03b-powerpoint-upload",
   "03c-powerpoint-macos",
-  "03d-powerpoint-windows",
   "01a-ai-setup",
   "01b-ai-prompt",
   "01c-ai-review",
+  "03d-powerpoint-windows",
+  "03e-powerpoint-windows-install",
   "04-references",
 ];
 
@@ -66,6 +67,14 @@ const slideIds = [
                 clientHeight: document.querySelector(".windows-install-map").clientHeight,
             }
             : null,
+          windowsReasonMap: document.querySelector(".windows-reason-map")
+            ? {
+                scrollWidth: document.querySelector(".windows-reason-map").scrollWidth,
+                clientWidth: document.querySelector(".windows-reason-map").clientWidth,
+                scrollHeight: document.querySelector(".windows-reason-map").scrollHeight,
+                clientHeight: document.querySelector(".windows-reason-map").clientHeight,
+              }
+            : null,
           installCopy: document.querySelector(".install-copy")
             ? {
                 scrollWidth: document.querySelector(".install-copy").scrollWidth,
@@ -110,6 +119,14 @@ const slideIds = [
           assert.match(layout.installImage.objectPosition, /50%/, `${slideIds[index]} screenshot must be vertically centered`);
         }
         if (slideIds[index] === "03d-powerpoint-windows") {
+          assert.ok(layout.windowsReasonMap, "Windows explanation slide must show why PowerPoint needs an approved folder");
+          assert.ok(
+            layout.windowsReasonMap.scrollWidth <= layout.windowsReasonMap.clientWidth + 1 &&
+              layout.windowsReasonMap.scrollHeight <= layout.windowsReasonMap.clientHeight + 1,
+            "Windows explanation map must remain fully visible"
+          );
+        }
+        if (slideIds[index] === "03e-powerpoint-windows-install") {
           assert.ok(layout.windowsInstallMap, "Windows installation slide must include its desktop installation map");
           assert.ok(
             layout.windowsInstallMap.scrollWidth <= layout.windowsInstallMap.clientWidth + 1 &&
@@ -121,7 +138,7 @@ const slideIds = [
       assert.deepEqual(pageErrors, []);
       await page.close();
     }
-    console.log("OK: eleven English slides fit the desktop and narrow presentation viewports");
+    console.log("OK: twelve English slides fit the desktop and narrow presentation viewports");
   } finally {
     await browser.close();
   }

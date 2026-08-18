@@ -40,13 +40,14 @@ assert.deepEqual(
     "03a-powerpoint-web",
     "03b-powerpoint-upload",
     "03c-powerpoint-macos",
-    "03d-powerpoint-windows",
     "01a-ai-setup",
     "01b-ai-prompt",
     "01c-ai-review",
+    "03d-powerpoint-windows",
+    "03e-powerpoint-windows-install",
     "04-references",
   ],
-  "presentation must publish the approved eleven-slide narrative"
+  "presentation must publish the approved twelve-slide narrative"
 );
 
 const slideFiles = catalog.map((slide) => {
@@ -71,10 +72,13 @@ assert.match(slideHtmlById.get("03b-powerpoint-upload"), /Upload My Add-in/);
 assert.match(slideHtmlById.get("03b-powerpoint-upload"), /powerpoint-upload-addin-manifest\.png/);
 assert.match(slideHtmlById.get("03c-powerpoint-macos"), /Library\/Containers\/com\.microsoft\.Powerpoint\/Data\/Documents\/wef/);
 assert.match(slideHtmlById.get("03c-powerpoint-macos"), /dicom-slides-powerpoint-plugin\.png/);
-assert.match(slideHtmlById.get("03d-powerpoint-windows"), /Trusted Add-in Catalogs/);
-assert.match(slideHtmlById.get("03d-powerpoint-windows"), /SHARED FOLDER/);
-assert.match(slideHtmlById.get("03d-powerpoint-windows"), /create-a-network-shared-folder-catalog-for-task-pane-and-content-add-ins/);
-for (const id of ["03a-powerpoint-web", "03c-powerpoint-macos", "03d-powerpoint-windows"]) {
+assert.match(slideHtmlById.get("03d-powerpoint-windows"), /small XML file.*does not contain.*exam/s);
+assert.match(slideHtmlById.get("03d-powerpoint-windows"), /ordinary folder/i);
+assert.match(slideHtmlById.get("03d-powerpoint-windows"), /Trusted Add-in Catalog.*shared folder/s);
+assert.match(slideHtmlById.get("03e-powerpoint-windows-install"), /Trusted Add-in Catalogs/);
+assert.match(slideHtmlById.get("03e-powerpoint-windows-install"), /SHARED FOLDER/);
+assert.match(slideHtmlById.get("03e-powerpoint-windows-install"), /create-a-network-shared-folder-catalog-for-task-pane-and-content-add-ins/);
+for (const id of ["03a-powerpoint-web", "03c-powerpoint-macos", "03e-powerpoint-windows-install"]) {
   const html = slideHtmlById.get(id);
   assert.match(html, /Right-click/, `${id} must tell readers to right-click the manifest link`);
   assert.match(html, /Download Linked File As/, `${id} must name the browser download command`);

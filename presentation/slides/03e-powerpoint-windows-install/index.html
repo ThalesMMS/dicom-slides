@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Install in PowerPoint for Windows — DICOM Slide</title>
+  <link rel="stylesheet" href="../../shared/slide.css">
+</head>
+<body>
+  <main class="slide active install-slide" aria-label="Install DICOM Slides locally in PowerPoint for Windows">
+    <div class="slide-inner">
+      <span class="eyebrow">PowerPoint desktop · Windows · 2 of 2</span>
+      <h2>Install locally on Windows</h2>
+      <div class="install-layout">
+        <div class="install-copy">
+          <p class="install-intro">You only need to approve the folder once. After that, DICOM Slides behaves like any other PowerPoint add-in.</p>
+          <ol class="install-steps">
+            <li><span class="install-step-number">1</span><div><h3>Download the small manifest</h3><p>Right-click <a class="slide-link" href="../../../powerpoint/manifest.xml" download>Download manifest.xml</a>, choose <strong>Download Linked File As…</strong> (or <strong>Save link as…</strong>), and save it as <strong>manifest.xml</strong>.</p></div></li>
+            <li><span class="install-step-number">2</span><div><h3>Create and share its folder</h3><p>Create a folder for DICOM Slides, move <strong>manifest.xml</strong> into it, then choose <strong>Properties &gt; Sharing &gt; Share</strong>. Copy the folder address Windows displays.</p></div></li>
+            <li><span class="install-step-number">3</span><div><h3>Show the folder to PowerPoint</h3><p>Choose <strong>File &gt; Options &gt; Trust Center &gt; Trust Center Settings &gt; Trusted Add-in Catalogs</strong>. Paste the folder address, choose <strong>Add catalog</strong>, enable <strong>Show in Menu</strong>, and restart PowerPoint.</p></div></li>
+            <li><span class="install-step-number">4</span><div><h3>Open DICOM Slides</h3><p>Choose <strong>Home &gt; Add-ins &gt; Advanced &gt; SHARED FOLDER</strong>, select <strong>DICOM Slides</strong>, and choose <strong>Add</strong>.</p></div></li>
+          </ol>
+          <p class="install-note"><a class="slide-link" href="https://learn.microsoft.com/en-us/office/dev/add-ins/testing/create-a-network-shared-folder-catalog-for-task-pane-and-content-add-ins">Open Microsoft's illustrated Windows guide</a>.</p>
+        </div>
+        <div class="install-visual" aria-label="Windows installation path">
+          <div class="windows-install-map">
+            <div class="windows-map-step"><span>1 · File Explorer</span><strong>Create and share the DICOM Slides folder</strong></div>
+            <div class="windows-map-arrow" aria-hidden="true">↓</div>
+            <div class="windows-map-step"><span>2 · PowerPoint settings</span><strong>Paste the folder address and approve it</strong></div>
+            <div class="windows-map-arrow" aria-hidden="true">↓</div>
+            <div class="windows-map-step"><span>3 · PowerPoint Add-ins</span><strong>Restart and add DICOM Slides</strong></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+  <script src="../../shared/slide-bridge.js"></script>
+</body>
+</html>

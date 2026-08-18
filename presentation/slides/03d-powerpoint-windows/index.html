@@ -4,32 +4,31 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="color-scheme" content="dark">
-  <title>Install in PowerPoint for Windows — DICOM Slide</title>
+  <title>Why Windows needs one extra step — DICOM Slide</title>
   <link rel="stylesheet" href="../../shared/slide.css">
 </head>
 <body>
-  <main class="slide active install-slide" aria-label="Install DICOM Slides locally in PowerPoint for Windows">
+  <main class="slide active install-slide" aria-label="Why local installation in PowerPoint for Windows needs an extra step">
     <div class="slide-inner">
-      <span class="eyebrow">PowerPoint add-in · 4 of 4</span>
-      <h2>Install locally on Windows</h2>
+      <span class="eyebrow">PowerPoint desktop · Windows · 1 of 2</span>
+      <h2>Why Windows needs one extra step</h2>
       <div class="install-layout">
         <div class="install-copy">
-          <p class="install-intro">PowerPoint for Windows loads sideloaded add-ins from a trusted shared-folder catalog.</p>
-          <ol class="install-steps">
-            <li><span class="install-step-number">1</span><div><h3>Download the manifest</h3><p>Right-click <a class="slide-link" href="../../../powerpoint/manifest.xml" download>Download manifest.xml</a>, choose <strong>Download Linked File As…</strong> (or <strong>Save link as…</strong>), and save it as <strong>manifest.xml</strong>.</p></div></li>
-            <li><span class="install-step-number">2</span><div><h3>Create a shared catalog</h3><p>Create a dedicated folder, copy <strong>manifest.xml</strong> into it, then choose <strong>Properties &gt; Sharing &gt; Share</strong>. Note its network path.</p></div></li>
-            <li><span class="install-step-number">3</span><div><h3>Trust the catalog</h3><p>Choose <strong>File &gt; Options &gt; Trust Center &gt; Trust Center Settings &gt; Trusted Add-in Catalogs</strong>. Add the network path, enable <strong>Show in Menu</strong>, and restart PowerPoint.</p></div></li>
-            <li><span class="install-step-number">4</span><div><h3>Add DICOM Slides</h3><p>Choose <strong>Home &gt; Add-ins &gt; Advanced &gt; SHARED FOLDER</strong>, select <strong>DICOM Slides</strong>, and choose <strong>Add</strong>.</p></div></li>
-          </ol>
-          <p class="install-note"><a class="slide-link" href="https://learn.microsoft.com/en-us/office/dev/add-ins/testing/create-a-network-shared-folder-catalog-for-task-pane-and-content-add-ins">Read Microsoft's Windows sideloading guide</a>.</p>
+          <p class="install-intro">DICOM Slides is the same add-in on every platform. Only the way PowerPoint accepts its installation file changes.</p>
+          <div class="windows-explanation">
+            <div class="windows-explanation-card"><p><strong>manifest.xml</strong> is a small XML file that tells PowerPoint where to find DICOM Slides. It does not contain the add-in or an exam.</p></div>
+            <p><strong>PowerPoint online</strong> lets you upload that file directly. <strong>PowerPoint for Mac</strong> checks its own local add-ins folder.</p>
+            <p><strong>PowerPoint for Windows</strong> only lists an XML add-in after you approve the folder that contains its manifest.</p>
+            <p>Microsoft calls the approved folder a <strong>Trusted Add-in Catalog</strong>. Despite the name, it is simply a shared folder that PowerPoint is allowed to check.</p>
+          </div>
         </div>
-        <div class="install-visual" aria-label="Windows installation path">
-          <div class="windows-install-map">
-            <div class="windows-map-step"><span>File Explorer</span><strong>Shared folder containing manifest.xml</strong></div>
-            <div class="windows-map-arrow" aria-hidden="true">↓</div>
-            <div class="windows-map-step"><span>PowerPoint Trust Center</span><strong>Trusted Add-in Catalogs · Show in Menu</strong></div>
-            <div class="windows-map-arrow" aria-hidden="true">↓</div>
-            <div class="windows-map-step"><span>Office Add-ins</span><strong>SHARED FOLDER · DICOM Slides · Add</strong></div>
+        <div class="install-visual" aria-label="Difference between an ordinary folder and a folder approved by PowerPoint">
+          <div class="windows-reason-map">
+            <div class="windows-reason-state"><span>Ordinary folder</span><strong>manifest.xml is present</strong><small>PowerPoint does not check this folder, so the add-in remains invisible.</small></div>
+            <div class="windows-reason-arrow"><b aria-hidden="true">↓</b>Approve this folder once</div>
+            <div class="windows-reason-state approved"><span>Microsoft's name: Trusted Add-in Catalog</span><strong>A shared folder PowerPoint may check</strong></div>
+            <div class="windows-reason-arrow"><b aria-hidden="true">↓</b>Restart PowerPoint</div>
+            <div class="windows-reason-state ready"><span>Ready</span><strong>DICOM Slides appears in Add-ins</strong></div>
           </div>
         </div>
       </div>
