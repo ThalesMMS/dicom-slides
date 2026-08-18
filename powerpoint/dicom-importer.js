@@ -479,12 +479,10 @@
       if (frameInfo.componentCount !== expectedComponents) {
         throw new Error(`JPEG 2000 frame has ${frameInfo.componentCount} components; expected ${expectedComponents}.`);
       }
-      const expectedBitsStored = Number(record.bitsStored || record.bitsAllocated);
       if (!Number.isInteger(frameInfo.bitsPerSample)
           || frameInfo.bitsPerSample < 1
-          || frameInfo.bitsPerSample > Number(record.bitsAllocated)
-          || frameInfo.bitsPerSample !== expectedBitsStored) {
-        throw new Error(`JPEG 2000 uses ${frameInfo.bitsPerSample}-bit samples; DICOM Bits Stored is ${expectedBitsStored}.`);
+          || frameInfo.bitsPerSample > 16) {
+        throw new Error(`JPEG 2000 uses unsupported ${frameInfo.bitsPerSample}-bit samples; expected 1-16.`);
       }
       if (Boolean(frameInfo.isSigned) !== expectedSigned) {
         throw new Error("JPEG 2000 signedness does not match DICOM Pixel Representation.");

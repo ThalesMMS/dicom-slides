@@ -137,6 +137,7 @@ function encapsulatedPixelData(encodedFrame) {
 function makeJpeg2000Dicom({
   rgb = false,
   precision = rgb ? 8 : 12,
+  bitsStored = precision,
   pixelRepresentation = 0,
   transferSyntax = "1.2.840.10008.1.2.4.91",
 } = {}) {
@@ -156,7 +157,6 @@ function makeJpeg2000Dicom({
   const rows = rgb ? 1 : 2;
   const columns = 2;
   const bits = precision <= 8 ? 8 : 16;
-  const bitsStored = precision;
   const description = rgb ? "3D MIP" : "AVEC I.V.";
   return concat([
     preamble,
@@ -485,6 +485,23 @@ async function main() {
   );
   assert.deepEqual(
     [0, 1, 2, 3].map((index) => jpeg2000TenBitView.getInt16(index * 2, true)),
+    [0, 0, 127, 255],
+  );
+
+  const jpeg2000DifferentStoredDepthResult = await importer.importFiles([
+    fileLike("ten-in-twelve-bit.dcm", makeJpeg2000Dicom({ precision: 10, bitsStored: 12 })),
+  ], { chunkSize: 1, persist: false });
+  const jpeg2000DifferentStoredDepthSeries = jpeg2000DifferentStoredDepthResult.study.series[0];
+  const jpeg2000DifferentStoredDepthRaw = await gunzipBase64(
+    chunks.get(`${jpeg2000DifferentStoredDepthSeries.caseId}:0`),
+  );
+  const jpeg2000DifferentStoredDepthView = new DataView(
+    jpeg2000DifferentStoredDepthRaw.buffer,
+    jpeg2000DifferentStoredDepthRaw.byteOffset,
+    jpeg2000DifferentStoredDepthRaw.byteLength,
+  );
+  assert.deepEqual(
+    [0, 1, 2, 3].map((index) => jpeg2000DifferentStoredDepthView.getInt16(index * 2, true)),
     [0, 0, 127, 255],
   );
 
