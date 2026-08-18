@@ -1,2 +1,7 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# Installer checksums are byte-exact and must survive Windows checkouts.
+powerpoint/manifest.xml text eol=lf
+scripts/*.sh text eol=lf
+scripts/*.ps1 text eol=lf

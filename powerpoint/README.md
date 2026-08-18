@@ -154,7 +154,7 @@ contain identifiers, private tags are not exhaustively analyzed, and text may
 be burned directly into the pixels. Review every imported exam before sharing
 a presentation or publishing a package.
 
-## Install from GitHub Pages
+## Installation
 
 The production manifest loads the add-in from this exact GitHub Pages URL:
 
@@ -162,18 +162,51 @@ The production manifest loads the add-in from this exact GitHub Pages URL:
 https://thalesmms.github.io/dicom-slides/powerpoint/content.html
 ```
 
-After the files are present on GitHub Pages, download
-`powerpoint/manifest.xml` and sideload it using the procedure for the PowerPoint
-client in which you will test the add-in.
+No DICOM files are uploaded during installation or local import. The helper
+scripts are plain text and can be inspected before they are run:
 
-### PowerPoint on the web
+- [`../scripts/install-powerpoint-macos.sh`](../scripts/install-powerpoint-macos.sh)
+- [`../scripts/install-powerpoint-windows.ps1`](../scripts/install-powerpoint-windows.ps1)
 
-1. Open a presentation and choose **Home > Add-ins > More Settings**.
-2. Choose **Upload My Add-in** and select `manifest.xml`.
-3. Insert **DICOM Slides** into the current slide.
-4. Open the gear menu and choose **Files**, **Folder**, or **ZIP**.
+### PowerPoint on the web (recommended for macOS and Windows)
 
-### PowerPoint for macOS
+1. [Download `manifest.xml`](https://github.com/ThalesMMS/dicom-slides/raw/refs/heads/main/powerpoint/manifest.xml) (Right click -> Save Page As...).
+2. Open [PowerPoint for the web](https://powerpoint.cloud.microsoft/) and open
+   a presentation.
+3. Choose **Home > Add-ins > More Settings**. Some versions label the same
+   option **Advanced**.
+4. Choose **Upload My Add-in** and select the downloaded `manifest.xml`.
+5. Insert **DICOM Slides**, open its gear menu, and choose **Files**,
+   **Folder**, or **ZIP**.
+
+The sideloaded manifest is associated with that browser. Clearing its cache or
+using another browser may require uploading the manifest again. If **Upload My
+Add-in** is absent, the Microsoft 365 organization may have disabled custom
+add-ins.
+
+### PowerPoint for macOS: one-command installation
+
+Close PowerPoint, open Terminal, and run:
+
+```console
+installer="$(mktemp -t dicom-slides-install)" && curl --proto '=https' --tlsv1.2 -fsSLo "$installer" https://raw.githubusercontent.com/ThalesMMS/dicom-slides/main/scripts/install-powerpoint-macos.sh && printf '%s  %s\n' '2cdc6a3dadc12ce0374439608978d2cf4c768e87a47390e1dcc51d462bd3b942' "$installer" | shasum -a 256 -c - && bash "$installer"
+```
+
+The command verifies the downloaded installer against its published SHA-256.
+The script then requires the exact published manifest SHA-256 and validates its
+ID, host, and production URL before writing `dicom-slides.xml`. It creates the
+official PowerPoint `wef` directory when needed, replaces only the DICOM Slides
+manifest on update, migrates an earlier DICOM Slides installation named
+`manifest.xml`, preserves other add-ins, and opens PowerPoint. It does not use
+`sudo`.
+
+To update, run the installation command again. To remove only DICOM Slides:
+
+```console
+installer="$(mktemp -t dicom-slides-install)" && curl --proto '=https' --tlsv1.2 -fsSLo "$installer" https://raw.githubusercontent.com/ThalesMMS/dicom-slides/main/scripts/install-powerpoint-macos.sh && printf '%s  %s\n' '2cdc6a3dadc12ce0374439608978d2cf4c768e87a47390e1dcc51d462bd3b942' "$installer" | shasum -a 256 -c - && bash "$installer" --uninstall
+```
+
+### PowerPoint for macOS: manual installation
 
 1. Close PowerPoint.
 2. In Finder, choose **Go > Go to Folder** and open:
@@ -182,13 +215,49 @@ client in which you will test the add-in.
    ~/Library/Containers/com.microsoft.Powerpoint/Data/Documents/wef
    ```
 
-3. Create the `wef` directory when it does not exist, then copy
-   `manifest.xml` into it.
+3. Create the `wef` directory when it does not exist, then copy the downloaded
+   `manifest.xml` into it. Rename it to `dicom-slides.xml` so future updates do
+   not affect other manifests.
 4. Reopen PowerPoint and choose **Home > Add-ins > DICOM Slides**.
 
-For managed or broader Windows deployment, use the Microsoft 365 admin center
-or an Office trusted add-in catalog. Uploading the XML manifest in PowerPoint
-on the web is the simplest cross-platform development check.
+### Windows helper
+
+Paste the following command into PowerShell:
+
+```powershell
+$installer = Join-Path $env:TEMP ("dicom-slides-install-" + [guid]::NewGuid().ToString("N") + ".ps1"); $expected = "7bbe39aef6a7ebfc2a03eda8bc47d1db7ad2b6e74c27328bbff3e2905006101b"; Invoke-WebRequest "https://raw.githubusercontent.com/ThalesMMS/dicom-slides/main/scripts/install-powerpoint-windows.ps1" -OutFile $installer; if ((Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash.ToLowerInvariant() -ne $expected) { Remove-Item -LiteralPath $installer -Force; throw "DICOM Slides installer checksum mismatch" }; powershell.exe -NoProfile -ExecutionPolicy Bypass -File $installer
+```
+
+The command verifies the downloaded helper against its published SHA-256 and
+runs it in a child PowerShell process whose execution-policy override applies
+only to that process. The helper requires the exact published manifest SHA-256,
+places `dicom-slides-manifest.xml` in the user's Downloads directory, opens
+PowerPoint for the web, and prints the exact upload steps. It cannot silently
+upload the manifest because Office requires that user action. It does not
+require administrator rights.
+
+Windows desktop sideloading uses a trusted add-in catalog and may require
+administrator or organizational approval. Run the already-downloaded helper
+with
+`powershell.exe -NoProfile -ExecutionPolicy Bypass -File $installer -Mode DesktopGuide`
+to prepare the manifest and open the official Microsoft instructions. An
+organizational policy can still block scripts. For managed deployment, use the
+Microsoft 365 admin center instead of a per-user script.
+
+### Troubleshooting installation
+
+- **The add-in does not appear:** close every PowerPoint window, reopen the
+  application, and check **Home > Add-ins** again.
+- **An old version still loads:** clear the Office add-in web cache, then
+  reopen PowerPoint. On macOS, the task pane's personality menu provides
+  **Clear Web Cache**.
+- **The upload option is missing:** custom add-ins may be blocked by the
+  Microsoft 365 account or organization.
+- **A locally imported exam disappeared:** imported packages live in the
+  Office webview's IndexedDB. Clearing the web cache removes those packages;
+  import the original DICOM files or ZIP again.
+- **Corporate installation:** ask the Microsoft 365 administrator to deploy
+  the manifest through **Settings > Integrated apps**.
 
 ## Preconverted and remote studies
 

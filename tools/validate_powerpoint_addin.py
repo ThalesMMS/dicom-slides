@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import stat
 import sys
 import uuid
 import xml.etree.ElementTree as ET
@@ -265,12 +267,51 @@ def validate_documentation() -> None:
         require(token in readme, f"powerpoint/README.md is missing {token!r}")
 
 
+def validate_installers() -> None:
+    scripts = ROOT / "scripts"
+    macos = scripts / "install-powerpoint-macos.sh"
+    windows = scripts / "install-powerpoint-windows.ps1"
+    require(macos.is_file(), "missing scripts/install-powerpoint-macos.sh")
+    require(windows.is_file(), "missing scripts/install-powerpoint-windows.ps1")
+    require(bool(macos.stat().st_mode & stat.S_IXUSR), "scripts/install-powerpoint-macos.sh is not executable")
+    require(macos.stat().st_size > 0, "scripts/install-powerpoint-macos.sh is empty")
+    require(windows.stat().st_size > 0, "scripts/install-powerpoint-windows.ps1 is empty")
+
+    attributes_path = ROOT / ".gitattributes"
+    require(attributes_path.is_file(), "missing .gitattributes")
+    attributes = {
+        line.strip()
+        for line in attributes_path.read_text(encoding="utf-8").splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    }
+    for rule in (
+        "powerpoint/manifest.xml text eol=lf",
+        "scripts/*.sh text eol=lf",
+        "scripts/*.ps1 text eol=lf",
+    ):
+        require(rule in attributes, f".gitattributes must enforce LF line endings with: {rule}")
+
+    checksums = {
+        macos.name: hashlib.sha256(macos.read_bytes()).hexdigest(),
+        windows.name: hashlib.sha256(windows.read_bytes()).hexdigest(),
+    }
+    for readme in (ROOT / "README.md", ROOT / "powerpoint" / "README.md"):
+        require(readme.is_file(), f"missing {readme.relative_to(ROOT)}")
+        documentation = readme.read_text(encoding="utf-8")
+        for script_name, checksum in checksums.items():
+            require(
+                checksum in documentation,
+                f"{readme.relative_to(ROOT)} is missing the current installer SHA-256 for {script_name}",
+            )
+
+
 def main() -> int:
     try:
         validate_manifest()
         validate_html_and_scripts()
         validate_importer()
         validate_documentation()
+        validate_installers()
     except (ET.ParseError, OSError, ValueError) as error:
         print(f"PowerPoint add-in validation failed: {error}", file=sys.stderr)
         return 1

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import shutil
 import tempfile
@@ -14,6 +15,10 @@ SPEC = importlib.util.spec_from_file_location("validate_powerpoint_addin", MODUL
 assert SPEC and SPEC.loader
 VALIDATOR = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(VALIDATOR)
+INSTALLER_GIT_ATTRIBUTES = """powerpoint/manifest.xml text eol=lf
+scripts/*.sh text eol=lf
+scripts/*.ps1 text eol=lf
+"""
 
 
 class PowerPointAddinTests(unittest.TestCase):
@@ -166,6 +171,63 @@ class PowerPointAddinTests(unittest.TestCase):
             "https://thalesmms.github.io/dicom-slides/powerpoint/content.html",
             readme,
         )
+
+    def test_installers_are_packaged(self) -> None:
+        VALIDATOR.validate_installers()
+
+    def test_installer_validation_rejects_a_missing_scripts_directory(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            with mock.patch.object(VALIDATOR, "ROOT", Path(directory)):
+                with self.assertRaisesRegex(ValueError, "install-powerpoint-macos.sh"):
+                    VALIDATOR.validate_installers()
+
+    def test_installer_validation_requires_current_checksums_in_both_readmes(self) -> None:
+        macos = ROOT / "scripts" / "install-powerpoint-macos.sh"
+        windows = ROOT / "scripts" / "install-powerpoint-windows.ps1"
+        macos_checksum = hashlib.sha256(macos.read_bytes()).hexdigest()
+        windows_checksum = hashlib.sha256(windows.read_bytes()).hexdigest()
+        complete_documentation = f"{macos_checksum}\n{windows_checksum}\n"
+
+        for missing_readme in ("README.md", "powerpoint/README.md"):
+            with self.subTest(missing_readme=missing_readme), tempfile.TemporaryDirectory() as directory:
+                fixture_root = Path(directory)
+                fixture_scripts = fixture_root / "scripts"
+                fixture_scripts.mkdir()
+                shutil.copy2(macos, fixture_scripts / macos.name)
+                shutil.copy2(windows, fixture_scripts / windows.name)
+                fixture_powerpoint = fixture_root / "powerpoint"
+                fixture_powerpoint.mkdir()
+                (fixture_root / "README.md").write_text(complete_documentation, encoding="utf-8")
+                (fixture_powerpoint / "README.md").write_text(complete_documentation, encoding="utf-8")
+                (fixture_root / ".gitattributes").write_text(INSTALLER_GIT_ATTRIBUTES, encoding="utf-8")
+                (fixture_root / missing_readme).write_text(windows_checksum + "\n", encoding="utf-8")
+
+                with mock.patch.object(VALIDATOR, "ROOT", fixture_root):
+                    with self.assertRaisesRegex(ValueError, "current installer SHA-256"):
+                        VALIDATOR.validate_installers()
+
+    def test_installer_validation_requires_lf_checkout_rules(self) -> None:
+        macos = ROOT / "scripts" / "install-powerpoint-macos.sh"
+        windows = ROOT / "scripts" / "install-powerpoint-windows.ps1"
+        checksums = "\n".join(
+            hashlib.sha256(path.read_bytes()).hexdigest()
+            for path in (macos, windows)
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            fixture_root = Path(directory)
+            fixture_scripts = fixture_root / "scripts"
+            fixture_scripts.mkdir()
+            shutil.copy2(macos, fixture_scripts / macos.name)
+            shutil.copy2(windows, fixture_scripts / windows.name)
+            fixture_powerpoint = fixture_root / "powerpoint"
+            fixture_powerpoint.mkdir()
+            (fixture_root / "README.md").write_text(checksums, encoding="utf-8")
+            (fixture_powerpoint / "README.md").write_text(checksums, encoding="utf-8")
+            (fixture_root / ".gitattributes").write_text("* text=auto\n", encoding="utf-8")
+
+            with mock.patch.object(VALIDATOR, "ROOT", fixture_root):
+                with self.assertRaisesRegex(ValueError, "LF line endings"):
+                    VALIDATOR.validate_installers()
 
 
 if __name__ == "__main__":

@@ -24,6 +24,60 @@ copy and no backend.
 
 ![Visible Human abdominal CT rendered in the 3D viewer](docs/images/visible-human-ct-3d.png)
 
+## Install the PowerPoint add-in (about 3 minutes)
+
+The add-in itself is hosted on GitHub Pages. You only install its small XML
+manifest; no DICOM files are uploaded during installation or import.
+
+### Easiest on macOS or Windows: PowerPoint for the web
+
+1. [Download the DICOM Slides manifest](https://github.com/ThalesMMS/dicom-slides/raw/refs/heads/main/powerpoint/manifest.xml) (Right click -> Save Page As...)
+2. Open [PowerPoint for the web](https://powerpoint.cloud.microsoft/) and open
+   a presentation.
+3. Choose **Home > Add-ins > More Settings** (shown as **Advanced** in some
+   versions).
+4. Choose **Upload My Add-in**, select the downloaded `manifest.xml`, and then
+   insert **DICOM Slides**.
+5. Open the add-in's gear menu and choose **Files**, **Folder**, or **ZIP** to
+   import an exam locally.
+
+If **Upload My Add-in** is missing, your Microsoft 365 organization may have
+disabled custom add-ins. Ask its administrator or use a personal account that
+allows sideloading.
+
+### One-command helper for PowerPoint on macOS
+
+Paste this command into Terminal. It downloads the readable installer first,
+checks its published SHA-256, then installs or updates only the DICOM Slides
+manifest. It does not require `sudo` and preserves other add-ins.
+
+```console
+installer="$(mktemp -t dicom-slides-install)" && curl --proto '=https' --tlsv1.2 -fsSLo "$installer" https://raw.githubusercontent.com/ThalesMMS/dicom-slides/main/scripts/install-powerpoint-macos.sh && printf '%s  %s\n' '2cdc6a3dadc12ce0374439608978d2cf4c768e87a47390e1dcc51d462bd3b942' "$installer" | shasum -a 256 -c - && bash "$installer"
+```
+
+To remove only DICOM Slides, download the same script and pass `--uninstall`:
+
+```console
+installer="$(mktemp -t dicom-slides-install)" && curl --proto '=https' --tlsv1.2 -fsSLo "$installer" https://raw.githubusercontent.com/ThalesMMS/dicom-slides/main/scripts/install-powerpoint-macos.sh && printf '%s  %s\n' '2cdc6a3dadc12ce0374439608978d2cf4c768e87a47390e1dcc51d462bd3b942' "$installer" | shasum -a 256 -c - && bash "$installer" --uninstall
+```
+
+### One-command helper for Windows
+
+Paste this command into PowerShell. It downloads the readable helper, validates
+the manifest, saves it in Downloads, and opens PowerPoint for the web. Office
+still requires you to complete the **Upload My Add-in** step yourself.
+
+```powershell
+$installer = Join-Path $env:TEMP ("dicom-slides-install-" + [guid]::NewGuid().ToString("N") + ".ps1"); $expected = "7bbe39aef6a7ebfc2a03eda8bc47d1db7ad2b6e74c27328bbff3e2905006101b"; Invoke-WebRequest "https://raw.githubusercontent.com/ThalesMMS/dicom-slides/main/scripts/install-powerpoint-windows.ps1" -OutFile $installer; if ((Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash.ToLowerInvariant() -ne $expected) { Remove-Item -LiteralPath $installer -Force; throw "DICOM Slides installer checksum mismatch" }; powershell.exe -NoProfile -ExecutionPolicy Bypass -File $installer
+```
+
+Windows desktop sideloading requires a trusted add-in catalog and may require
+administrator approval. Run
+`powershell.exe -NoProfile -ExecutionPolicy Bypass -File $installer -Mode DesktopGuide`
+for the official desktop procedure. The execution-policy override applies only
+to that child process and does not change the machine policy; an organization
+can still block scripts. See the [complete PowerPoint installation and troubleshooting guide](powerpoint/README.md#installation).
+
 ## Local demo
 
 Open `index.html` directly. The project and included studies work with
@@ -178,6 +232,7 @@ exams/
   inbox/                 raw sources ignored by Git
   library/               two demonstration packages
 tools/                    converters, importer, and validator
+scripts/                  PowerPoint installation helpers
 tests/                    Python, JavaScript, and browser tests
 LICENSE                   code/documentation: MIT
 DATA_LICENSES.md          image licenses and provenance
