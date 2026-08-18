@@ -14,9 +14,9 @@ const slideIds = [
   "03c-powerpoint-macos",
   "01a-ai-setup",
   "01b-ai-prompt",
-  "01c-ai-review",
   "03d-powerpoint-windows",
   "03e-powerpoint-windows-install",
+  "01c-ai-review",
   "04-references",
 ];
 
