@@ -12,6 +12,7 @@ const slideIds = [
   "03a-powerpoint-web",
   "03b-powerpoint-upload",
   "03c-powerpoint-macos",
+  "03d-powerpoint-windows",
   "01a-ai-setup",
   "01b-ai-prompt",
   "01c-ai-review",
@@ -57,10 +58,33 @@ const slideIds = [
                 objectPosition: getComputedStyle(document.querySelector(".install-visual img")).objectPosition,
               }
             : null,
+          windowsInstallMap: document.querySelector(".windows-install-map")
+            ? {
+                scrollWidth: document.querySelector(".windows-install-map").scrollWidth,
+                clientWidth: document.querySelector(".windows-install-map").clientWidth,
+                scrollHeight: document.querySelector(".windows-install-map").scrollHeight,
+                clientHeight: document.querySelector(".windows-install-map").clientHeight,
+            }
+            : null,
+          installCopy: document.querySelector(".install-copy")
+            ? {
+                scrollWidth: document.querySelector(".install-copy").scrollWidth,
+                clientWidth: document.querySelector(".install-copy").clientWidth,
+                scrollHeight: document.querySelector(".install-copy").scrollHeight,
+                clientHeight: document.querySelector(".install-copy").clientHeight,
+              }
+            : null,
         }));
         assert.equal(layout.language, "en", `${slideIds[index]} must declare English`);
         assert.ok(layout.scrollWidth <= layout.clientWidth + 1, `${slideIds[index]} overflows horizontally`);
         assert.ok(layout.scrollHeight <= layout.clientHeight + 1, `${slideIds[index]} overflows vertically`);
+        if (layout.installCopy) {
+          assert.ok(
+            layout.installCopy.scrollWidth <= layout.installCopy.clientWidth + 1 &&
+              layout.installCopy.scrollHeight <= layout.installCopy.clientHeight + 1,
+            `${slideIds[index]} installation instructions must remain fully visible`
+          );
+        }
         if (viewport.width > 980 && layout.studyCard) {
           assert.ok(
             layout.studyCard.scrollHeight <= layout.studyCard.clientHeight + 1,
@@ -79,17 +103,25 @@ const slideIds = [
             "All review items must use the same single-column width"
           );
         }
-        if (slideIds[index].startsWith("03") && slideIds[index].includes("powerpoint")) {
+        if (["03a-powerpoint-web", "03b-powerpoint-upload", "03c-powerpoint-macos"].includes(slideIds[index])) {
           assert.ok(layout.installImage, `${slideIds[index]} must include its PowerPoint screenshot`);
           assert.ok(layout.installImage.naturalWidth > 0, `${slideIds[index]} screenshot must load`);
           assert.equal(layout.installImage.objectFit, "contain", `${slideIds[index]} screenshot must remain uncropped`);
           assert.match(layout.installImage.objectPosition, /50%/, `${slideIds[index]} screenshot must be vertically centered`);
         }
+        if (slideIds[index] === "03d-powerpoint-windows") {
+          assert.ok(layout.windowsInstallMap, "Windows installation slide must include its desktop installation map");
+          assert.ok(
+            layout.windowsInstallMap.scrollWidth <= layout.windowsInstallMap.clientWidth + 1 &&
+              layout.windowsInstallMap.scrollHeight <= layout.windowsInstallMap.clientHeight + 1,
+            "Windows installation map must remain fully visible"
+          );
+        }
       }
       assert.deepEqual(pageErrors, []);
       await page.close();
     }
-    console.log("OK: ten English slides fit the desktop and narrow presentation viewports");
+    console.log("OK: eleven English slides fit the desktop and narrow presentation viewports");
   } finally {
     await browser.close();
   }

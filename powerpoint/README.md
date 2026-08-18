@@ -184,7 +184,7 @@ scripts are plain text and can be inspected before they are run:
 
 ### PowerPoint on the web (recommended for macOS and Windows)
 
-1. [Download `manifest.xml`](https://github.com/ThalesMMS/dicom-slides/raw/refs/heads/main/powerpoint/manifest.xml) (Right click -> (Right click -> Download Linked File As...) -> save as `manifest.xml`.
+1. Right-click [Download `manifest.xml`](https://github.com/ThalesMMS/dicom-slides/raw/refs/heads/main/powerpoint/manifest.xml), choose **Download Linked File As...** (or **Save link as...**), and save the file as `manifest.xml`.
 2. Open [PowerPoint for the web](https://powerpoint.cloud.microsoft/) and open
    a presentation.
 3. Choose **Home > Add-ins > More Settings**. Some versions label the same
@@ -226,8 +226,7 @@ installer="$(mktemp -t dicom-slides-install)" && curl --proto '=https' --tlsv1.2
 ### PowerPoint for macOS: manual installation
 
 1. Close PowerPoint.
-2. [Download `manifest.xml`](https://github.com/ThalesMMS/dicom-slides/raw/refs/heads/main/powerpoint/manifest.xml)
-   and make sure the file is named `manifest.xml`.
+2. Right-click [Download `manifest.xml`](https://github.com/ThalesMMS/dicom-slides/raw/refs/heads/main/powerpoint/manifest.xml), choose **Download Linked File As...** (or **Save link as...**), and save the file as `manifest.xml`.
 3. Open Terminal and run:
 
    ```console

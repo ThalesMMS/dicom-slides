@@ -31,7 +31,7 @@ manifest; no DICOM files are uploaded during installation or import.
 
 ### Easiest on macOS or Windows: PowerPoint for the web
 
-1. [Download the DICOM Slides manifest](https://github.com/ThalesMMS/dicom-slides/raw/refs/heads/main/powerpoint/manifest.xml) (Right click -> Download Linked File As...) -> save as `manifest.xml`.
+1. Right-click [Download the DICOM Slides manifest](https://github.com/ThalesMMS/dicom-slides/raw/refs/heads/main/powerpoint/manifest.xml), choose **Download Linked File As...** (or **Save link as...**), and save the file as `manifest.xml`.
 2. Open [PowerPoint for the web](https://powerpoint.cloud.microsoft/) and open
    a presentation.
 3. Choose **Home > Add-ins > More Settings** (shown as **Advanced** in some
@@ -71,8 +71,7 @@ installer="$(mktemp -t dicom-slides-install)" && curl --proto '=https' --tlsv1.2
 ### Manual installation for PowerPoint on macOS
 
 1. Close PowerPoint.
-2. [Download the DICOM Slides manifest](https://github.com/ThalesMMS/dicom-slides/raw/refs/heads/main/powerpoint/manifest.xml)
-   and make sure the file is named `manifest.xml`.
+2. Right-click [Download the DICOM Slides manifest](https://github.com/ThalesMMS/dicom-slides/raw/refs/heads/main/powerpoint/manifest.xml), choose **Download Linked File As...** (or **Save link as...**), and save the file as `manifest.xml`.
 3. Open Terminal and run this command:
 
    ```console

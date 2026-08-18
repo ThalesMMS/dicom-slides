@@ -10,13 +10,13 @@
 <body>
   <main class="slide active install-slide" aria-label="Install DICOM Slides locally in PowerPoint for macOS">
     <div class="slide-inner">
-      <span class="eyebrow">PowerPoint add-in · 3 of 3</span>
+      <span class="eyebrow">PowerPoint add-in · 3 of 4</span>
       <h2>Install locally on macOS</h2>
       <div class="install-layout">
         <div class="install-copy">
           <p class="install-intro">PowerPoint for Mac loads sideloaded add-ins from its local <strong>wef</strong> folder.</p>
           <ol class="install-steps">
-            <li><span class="install-step-number">1</span><div><h3>Prepare the file</h3><p>Close PowerPoint and <a class="slide-link" href="../../../powerpoint/manifest.xml" download>download manifest.xml</a>.</p></div></li>
+            <li><span class="install-step-number">1</span><div><h3>Prepare the file</h3><p>Close PowerPoint. Right-click <a class="slide-link" href="../../../powerpoint/manifest.xml" download>Download manifest.xml</a>, choose <strong>Download Linked File As…</strong> (or <strong>Save link as…</strong>), and save it as <strong>manifest.xml</strong>.</p></div></li>
             <li><span class="install-step-number">2</span><div><h3>Create and open the add-ins folder</h3><p>Paste this command into Terminal:</p><code class="install-command">mkdir -p "$HOME/Library/Containers/com.microsoft.Powerpoint/Data/Documents/wef" &amp;&amp; open "$HOME/Library/Containers/com.microsoft.Powerpoint/Data/Documents/wef"</code></div></li>
             <li><span class="install-step-number">3</span><div><h3>Copy, rename, and reopen</h3><p>Move the file into that folder, rename it <strong>dicom-slides.xml</strong>, then reopen PowerPoint and choose <strong>Home &gt; Add-ins &gt; DICOM Slides</strong>.</p></div></li>
           </ol>
