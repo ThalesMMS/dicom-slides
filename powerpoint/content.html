@@ -117,7 +117,7 @@
               <button class="text-button" id="cancelImportButton" type="button">Cancel</button>
             </div>
           </div>
-          <p class="import-note">Supports uncompressed and JPEG 2000 single-frame series: 8/16-bit monochrome and 8-bit RGB.</p>
+          <p class="import-note">Supports uncompressed, JPEG 2000, and JPEG-LS single-frame series: 8/16-bit monochrome and 8-bit RGB/YBR_FULL.</p>
         </section>
 
         <div class="section-divider"><span>or use an existing package</span></div>
@@ -210,6 +210,7 @@
   <script src="../runtime/dicom-slide.js"></script>
   <script src="studies.js"></script>
   <script src="vendor/openjpeg/openjpegwasm_decode.js"></script>
+  <script src="vendor/charls/charlswasm_decode.js"></script>
   <script src="dicom-importer.js"></script>
   <script src="presentation-storage.js"></script>
   <script src="powerpoint-host.js"></script>

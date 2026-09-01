@@ -3,8 +3,9 @@
 
 The input can be a directory or a ZIP archive. Compressed transfer syntaxes are
 decoded in a temporary working directory through ``gdcmconv --raw`` when it is
-available. Single-frame JPEG 2000 can also use Pillow as an offline fallback;
-the source archive or directory is never modified.
+available. Single-frame JPEG 2000 uses Pillow and JPEG-LS uses
+pydicom/pyjpegls as local fallbacks; the source archive or directory is never
+modified.
 """
 from __future__ import annotations
 
@@ -21,6 +22,7 @@ import zipfile
 try:
     from .convert_dicom import (
         JPEG2000_TRANSFER_SYNTAXES,
+        JPEGLS_TRANSFER_SYNTAXES,
         UNCOMPRESSED_TRANSFER_SYNTAXES,
         convert_records,
         first_number,
@@ -30,6 +32,7 @@ try:
 except ImportError:
     from convert_dicom import (
         JPEG2000_TRANSFER_SYNTAXES,
+        JPEGLS_TRANSFER_SYNTAXES,
         UNCOMPRESSED_TRANSFER_SYNTAXES,
         convert_records,
         first_number,
@@ -97,7 +100,7 @@ def prepare_pixels(records: list[dict], destination: Path, gdcmconv: str | None)
         if transfer_syntax in UNCOMPRESSED_TRANSFER_SYNTAXES:
             prepared.append(parse_dicom(source))
             continue
-        if transfer_syntax in JPEG2000_TRANSFER_SYNTAXES and not gdcmconv:
+        if transfer_syntax in JPEG2000_TRANSFER_SYNTAXES or transfer_syntax in JPEGLS_TRANSFER_SYNTAXES:
             prepared.append(parse_dicom(source))
             continue
         if not gdcmconv:

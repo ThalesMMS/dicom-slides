@@ -1,6 +1,7 @@
 "use strict";
 
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
 const path = require("node:path");
 const zlib = require("node:zlib");
 
@@ -15,6 +16,10 @@ global.__DICOM_SLIDE_STUDIES__ = {};
 global.OpenJPEGWASM = require(path.resolve(
   __dirname,
   "../../powerpoint/vendor/openjpeg/openjpegwasm_decode.js",
+));
+global.CharLSWASM = require(path.resolve(
+  __dirname,
+  "../../powerpoint/vendor/charls/charlswasm_decode.js",
 ));
 
 require(path.resolve(__dirname, "../../powerpoint/dicom-importer.js"));
@@ -286,6 +291,16 @@ function makePlanarRgbDicom() {
     usElement(0x0028, 0x0103, 0),
     element(0x7fe0, 0x0010, "OB", planar),
   ]);
+}
+
+function fixture(name) {
+  const bytes = fs.readFileSync(path.resolve(__dirname, "../fixtures/jpegls", name));
+  return new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+}
+
+function int16Values(bytes) {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  return Array.from({ length: bytes.byteLength / 2 }, (_, index) => view.getInt16(index * 2, true));
 }
 
 function fileLike(name, bytes, type = "application/dicom") {
@@ -566,15 +581,92 @@ async function main() {
     /signed 8-bit JPEG 2000 is not supported by the local decoder/i,
   );
 
+  const jpegLsUnsignedBytes = fixture("mono-unsigned-lossless.dcm");
+  const jpegLsUnsignedMeta = importer.testing.parseDicomBuffer(
+    jpegLsUnsignedBytes,
+    "mono-unsigned-lossless.dcm",
+    true,
+  );
+  assert.equal(jpegLsUnsignedMeta.transferSyntaxUID, "1.2.840.10008.1.2.4.80");
+  assert.equal(importer.testing.supportedRecordReason(jpegLsUnsignedMeta), null);
+  const jpegLsUnsignedResult = await importer.importFiles([
+    fileLike("mono-unsigned-lossless.dcm", jpegLsUnsignedBytes),
+  ], { chunkSize: 1, persist: false });
+  const jpegLsUnsignedSeries = jpegLsUnsignedResult.study.series[0];
+  const jpegLsUnsignedManifest = manifests.get(jpegLsUnsignedSeries.caseId);
+  const jpegLsUnsignedRaw = await gunzipBase64(chunks.get(`${jpegLsUnsignedSeries.caseId}:0`));
+  const jpegLsUnsignedValues = int16Values(jpegLsUnsignedRaw);
+  assert.equal(jpegLsUnsignedValues.length, 64 * 64);
+  assert.deepEqual(jpegLsUnsignedValues.slice(0, 4), [0, 1, 2047, 4095]);
+  assert.equal(jpegLsUnsignedManifest.source.jpegLsNearLossless, 0);
+
+  const jpegLsSignedResult = await importer.importFiles([
+    fileLike("mono-signed-lossless.dcm", fixture("mono-signed-lossless.dcm")),
+  ], { chunkSize: 1, persist: false });
+  const jpegLsSignedSeries = jpegLsSignedResult.study.series[0];
+  const jpegLsSignedRaw = await gunzipBase64(chunks.get(`${jpegLsSignedSeries.caseId}:0`));
+  const jpegLsSignedValues = int16Values(jpegLsSignedRaw);
+  assert.equal(jpegLsSignedValues.length, 64 * 64);
+  assert.deepEqual(jpegLsSignedValues.slice(0, 4), [-2048, -1, 0, 2047]);
+
+  const jpegLsNearBytes = fixture("mono-unsigned-near-lossless.dcm");
+  const jpegLsNearMeta = importer.testing.parseDicomBuffer(
+    jpegLsNearBytes,
+    "mono-unsigned-near-lossless.dcm",
+    true,
+  );
+  assert.equal(jpegLsNearMeta.transferSyntaxUID, "1.2.840.10008.1.2.4.81");
+  assert.equal(importer.testing.supportedRecordReason(jpegLsNearMeta), null);
+  const jpegLsNearResult = await importer.importFiles([
+    fileLike("mono-unsigned-near-lossless.dcm", jpegLsNearBytes),
+  ], { chunkSize: 1, persist: false });
+  const jpegLsNearSeries = jpegLsNearResult.study.series[0];
+  const jpegLsNearManifest = manifests.get(jpegLsNearSeries.caseId);
+  const jpegLsNearRaw = await gunzipBase64(chunks.get(`${jpegLsNearSeries.caseId}:0`));
+  const jpegLsNearValues = int16Values(jpegLsNearRaw);
+  assert.equal(jpegLsNearValues.length, 64 * 64);
+  [100, 500, 1000, 2000].forEach((expected, index) => {
+    assert(Math.abs(jpegLsNearValues[index] - expected) <= 2);
+  });
+  assert.equal(jpegLsNearManifest.source.jpegLsNearLossless, 2);
+
+  const jpegLsRgbResult = await importer.importFiles([
+    fileLike("rgb-lossless.dcm", fixture("rgb-lossless.dcm")),
+  ], { chunkSize: 1, persist: false });
+  const jpegLsRgbSeries = jpegLsRgbResult.study.series[0];
+  const jpegLsRgbManifest = manifests.get(jpegLsRgbSeries.caseId);
+  const jpegLsRgbRaw = await gunzipBase64(chunks.get(`${jpegLsRgbSeries.caseId}:0`));
+  assert.equal(jpegLsRgbManifest.pixelType, "rgb8");
+  assert.equal(jpegLsRgbRaw.length, 64 * 64 * 3);
+  assert.deepEqual(Array.from(jpegLsRgbRaw.slice(0, 6)), [10, 20, 30, 40, 50, 60]);
+
+  assert.deepEqual(
+    Array.from(importer.testing.normalizeJpegLsColor(Uint8Array.from([1, 2, 3, 4, 5, 6]), 1, 2, 0)),
+    [1, 3, 5, 2, 4, 6],
+  );
+  assert.deepEqual(
+    Array.from(importer.testing.normalizeJpegLsColor(Uint8Array.from([1, 2, 3, 4, 5, 6]), 1, 2, 1)),
+    [1, 3, 5, 2, 4, 6],
+  );
+  assert.deepEqual(
+    Array.from(importer.testing.expandColorPrecisionTo8(Uint8Array.from([0, 15]), 4)),
+    [0, 255],
+  );
+  assert.deepEqual(
+    Array.from(importer.testing.ybrFullToRgb(Uint8Array.from([128, 128, 128]))),
+    [128, 128, 128],
+  );
+
+  const mislabeledLossless = Uint8Array.from(jpegLsNearBytes);
+  const nearUid = Buffer.from("1.2.840.10008.1.2.4.81", "ascii");
+  const uidOffset = Buffer.from(mislabeledLossless).indexOf(nearUid);
+  assert(uidOffset >= 0, "JPEG-LS transfer syntax UID was not found in fixture");
+  mislabeledLossless[uidOffset + nearUid.length - 1] = "0".charCodeAt(0);
   await assert.rejects(
     importer.importFiles([
-      fileLike("jpeg-ls.dcm", makeDicom({ transferSyntax: "1.2.840.10008.1.2.4.80" })),
-    ], { persist: false }),
-    (error) => {
-      assert.match(error.message, /compressed or unsupported transfer syntax/);
-      assert.doesNotMatch(error.message, /Identifying metadata/);
-      return true;
-    },
+      fileLike("mislabeled-lossless.dcm", mislabeledLossless),
+    ], { chunkSize: 1, persist: false }),
+    /Lossless transfer syntax contains NEAR=2/i,
   );
 
   console.log("PowerPoint browser DICOM importer tests passed.");

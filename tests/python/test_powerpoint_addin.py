@@ -172,6 +172,18 @@ class PowerPointAddinTests(unittest.TestCase):
         self.assertTrue((codec_root / "LICENSE").is_file())
         self.assertTrue((codec_root / "LICENSE-OPENJPEG").is_file())
 
+    def test_powerpoint_loads_local_jpegls_decoder(self) -> None:
+        html = (ROOT / "powerpoint" / "content.html").read_text(encoding="utf-8")
+        self.assertIn(
+            '<script src="vendor/charls/charlswasm_decode.js"></script>',
+            html,
+        )
+        codec_root = ROOT / "powerpoint" / "vendor" / "charls"
+        self.assertTrue((codec_root / "charlswasm_decode.js").is_file())
+        self.assertTrue((codec_root / "charlswasm_decode.wasm").is_file())
+        self.assertTrue((codec_root / "LICENSE").is_file())
+        self.assertTrue((codec_root / "LICENSE-CHARLS").is_file())
+
     def test_runtime_entrypoint_is_present(self) -> None:
         self.assertTrue((ROOT / "runtime" / "dicom-slide.js").is_file())
 

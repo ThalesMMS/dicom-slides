@@ -211,11 +211,12 @@ python tools/convert_study.py exams/inbox/my-exam.zip exams/library/my-exam \
 ```
 
 The converter accepts monochrome/RGB single-frame images, Implicit/Explicit VR
-Little Endian, and Explicit VR Big Endian. Pillow can decode JPEG 2000
-single-frame images; other compressed syntaxes require `gdcmconv` only in the
-conversion environment. The PowerPoint browser importer ships a local
-OpenJPEG/Wasm decoder for single-frame JPEG 2000; it does not upload pixels to a
-service.
+Little Endian, and Explicit VR Big Endian. Optional local dependencies decode
+JPEG 2000 through Pillow and JPEG-LS Lossless/Near-Lossless through
+pydicom/pyjpegls; other compressed syntaxes require `gdcmconv` only in the
+conversion environment. The PowerPoint browser importer ships local
+OpenJPEG/Wasm and CharLS/Wasm decoders for JPEG 2000 and JPEG-LS. Pixel data is
+never uploaded to a codec service.
 
 Optional conversion dependencies:
 
