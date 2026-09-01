@@ -646,7 +646,7 @@ async function main() {
   );
   assert.deepEqual(
     Array.from(importer.testing.normalizeJpegLsColor(Uint8Array.from([1, 2, 3, 4, 5, 6]), 1, 2, 1)),
-    [1, 3, 5, 2, 4, 6],
+    [1, 2, 3, 4, 5, 6],
   );
   assert.deepEqual(
     Array.from(importer.testing.expandColorPrecisionTo8(Uint8Array.from([0, 15]), 4)),

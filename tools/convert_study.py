@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib.util
 import json
 from pathlib import Path
 import re
@@ -92,6 +93,16 @@ def series_sort_key(item: tuple[str, list[dict]]) -> tuple[float, str, str]:
     )
 
 
+def local_decoder_available(transfer_syntax: str) -> bool:
+    if transfer_syntax in JPEG2000_TRANSFER_SYNTAXES:
+        required_modules = ("PIL",)
+    elif transfer_syntax in JPEGLS_TRANSFER_SYNTAXES:
+        required_modules = ("numpy", "pydicom", "jpeg_ls")
+    else:
+        return False
+    return all(importlib.util.find_spec(module) is not None for module in required_modules)
+
+
 def prepare_pixels(records: list[dict], destination: Path, gdcmconv: str | None) -> list[dict]:
     prepared: list[dict] = []
     for index, header in enumerate(records):
@@ -100,7 +111,7 @@ def prepare_pixels(records: list[dict], destination: Path, gdcmconv: str | None)
         if transfer_syntax in UNCOMPRESSED_TRANSFER_SYNTAXES:
             prepared.append(parse_dicom(source))
             continue
-        if transfer_syntax in JPEG2000_TRANSFER_SYNTAXES or transfer_syntax in JPEGLS_TRANSFER_SYNTAXES:
+        if local_decoder_available(transfer_syntax):
             prepared.append(parse_dicom(source))
             continue
         if not gdcmconv:

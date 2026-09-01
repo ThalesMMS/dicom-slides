@@ -656,7 +656,7 @@
     if (bytes.byteLength !== expectedBytes) {
       throw new Error(`JPEG-LS color payload has ${bytes.byteLength} bytes; expected ${expectedBytes}.`);
     }
-    if (interleaveMode === 2) return Uint8Array.from(bytes);
+    if (interleaveMode === 1 || interleaveMode === 2) return Uint8Array.from(bytes);
 
     const output = new Uint8Array(expectedBytes);
     if (interleaveMode === 0) {
@@ -664,18 +664,6 @@
         output[pixel * 3] = bytes[pixel];
         output[pixel * 3 + 1] = bytes[pixelCount + pixel];
         output[pixel * 3 + 2] = bytes[pixelCount * 2 + pixel];
-      }
-      return output;
-    }
-    if (interleaveMode === 1) {
-      let source = 0;
-      for (let row = 0; row < rows; row += 1) {
-        for (let component = 0; component < 3; component += 1) {
-          for (let column = 0; column < columns; column += 1) {
-            output[(row * columns + column) * 3 + component] = bytes[source];
-            source += 1;
-          }
-        }
       }
       return output;
     }

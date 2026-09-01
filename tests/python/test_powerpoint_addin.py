@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import hashlib
 import importlib.util
+import os
 import shutil
+import subprocess
 import tempfile
 import unittest
 import xml.etree.ElementTree as ET
@@ -22,6 +24,67 @@ scripts/*.ps1 text eol=lf
 
 
 class PowerPointAddinTests(unittest.TestCase):
+    def copy_vendoring_script(self, root: Path) -> Path:
+        scripts = root / "scripts"
+        scripts.mkdir()
+        script = scripts / "vendor-jpegls-codec.sh"
+        shutil.copy2(ROOT / "scripts" / script.name, script)
+        script.chmod(0o755)
+        return script
+
+    def write_fake_npm(self, root: Path, body: str) -> Path:
+        fake_bin = root / "bin"
+        fake_bin.mkdir()
+        npm = fake_bin / "npm"
+        npm.write_text(f"#!/usr/bin/env bash\n{body}\n", encoding="utf-8")
+        npm.chmod(0o755)
+        return fake_bin
+
+    def test_jpegls_vendoring_script_runs_directly(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            script = self.copy_vendoring_script(root)
+            fake_bin = self.write_fake_npm(root, "exit 23")
+            environment = os.environ.copy()
+            environment["PATH"] = f"{fake_bin}{os.pathsep}{environment['PATH']}"
+
+            try:
+                completed = subprocess.run(
+                    [script],
+                    text=True,
+                    capture_output=True,
+                    env=environment,
+                )
+            except OSError as error:
+                self.fail(f"vendoring script could not be executed directly: {error}")
+
+            self.assertEqual(completed.returncode, 23)
+
+    def test_jpegls_vendoring_script_rejects_unexpected_assets(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            script = self.copy_vendoring_script(root)
+            fake_bin = self.write_fake_npm(
+                root,
+                """destination=\"${@: -1}\"
+package_root=\"$(mktemp -d)\"
+mkdir -p \"$package_root/package/dist\"
+printf 'unexpected javascript' >\"$package_root/package/dist/charlswasm_decode.js\"
+printf 'unexpected wasm' >\"$package_root/package/dist/charlswasm_decode.wasm\"
+tar -czf \"$destination/fake-charls.tgz\" -C \"$package_root\" package""",
+            )
+            environment = os.environ.copy()
+            environment["PATH"] = f"{fake_bin}{os.pathsep}{environment['PATH']}"
+
+            completed = subprocess.run(
+                ["bash", script],
+                text=True,
+                capture_output=True,
+                env=environment,
+            )
+
+            self.assertNotEqual(completed.returncode, 0, completed.stdout + completed.stderr)
+
     def test_manifest(self) -> None:
         VALIDATOR.validate_manifest()
 
