@@ -206,5 +206,34 @@ class EncapsulatedPixelDataTests(unittest.TestCase):
             extract(meta)
 
 
+class JpegLsOfflineConversionTests(unittest.TestCase):
+    fixtures = ROOT / "tests" / "fixtures" / "jpegls"
+
+    def test_decodes_unsigned_and_signed_lossless_monochrome(self) -> None:
+        unsigned_meta = convert_dicom.parse_dicom(self.fixtures / "mono-unsigned-lossless.dcm")
+        signed_meta = convert_dicom.parse_dicom(self.fixtures / "mono-signed-lossless.dcm")
+
+        self.assertEqual(unsigned_meta["transferSyntaxUID"], "1.2.840.10008.1.2.4.80")
+        unsigned = list(convert_dicom.read_hu(unsigned_meta))
+        self.assertEqual(len(unsigned), 64 * 64)
+        self.assertEqual(unsigned[:4], [0, 1, 2047, 4095])
+        signed = list(convert_dicom.read_hu(signed_meta))
+        self.assertEqual(len(signed), 64 * 64)
+        self.assertEqual(signed[:4], [-2048, -1, 0, 2047])
+
+    def test_decodes_near_lossless_with_declared_error_bound(self) -> None:
+        meta = convert_dicom.parse_dicom(self.fixtures / "mono-unsigned-near-lossless.dcm")
+        decoded = list(convert_dicom.read_hu(meta))
+        self.assertEqual(len(decoded), 64 * 64)
+        for actual, expected in zip(decoded, [100, 500, 1000, 2000]):
+            self.assertLessEqual(abs(actual - expected), 2)
+
+    def test_decodes_rgb_lossless(self) -> None:
+        meta = convert_dicom.parse_dicom(self.fixtures / "rgb-lossless.dcm")
+        decoded = convert_dicom.read_rgb(meta)
+        self.assertEqual(len(decoded), 64 * 64 * 3)
+        self.assertEqual(decoded[:6], bytes([10, 20, 30, 40, 50, 60]))
+
+
 if __name__ == "__main__":
     unittest.main()

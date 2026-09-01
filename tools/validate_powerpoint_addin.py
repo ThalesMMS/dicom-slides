@@ -183,6 +183,7 @@ def validate_html_and_scripts() -> None:
         "../runtime/dicom-slide.js",
         "studies.js",
         "vendor/openjpeg/openjpegwasm_decode.js",
+        "vendor/charls/charlswasm_decode.js",
         "dicom-importer.js",
         "presentation-storage.js",
         "powerpoint-host.js",
@@ -211,6 +212,11 @@ def validate_html_and_scripts() -> None:
         "vendor/openjpeg/LICENSE",
         "vendor/openjpeg/LICENSE-OPENJPEG",
         "vendor/openjpeg/README.md",
+        "vendor/charls/charlswasm_decode.js",
+        "vendor/charls/charlswasm_decode.wasm",
+        "vendor/charls/LICENSE",
+        "vendor/charls/LICENSE-CHARLS",
+        "vendor/charls/README.md",
     ):
         require((POWERPOINT / relative).is_file(), f"missing powerpoint/{relative}")
     require((ROOT / "runtime" / "dicom-slide.js").is_file(), "missing runtime/dicom-slide.js")
@@ -270,6 +276,9 @@ def validate_importer() -> None:
         "patientID",
         "JPEG2000_TRANSFER_SYNTAXES",
         "OpenJPEGWASM",
+        "JPEGLS_TRANSFER_SYNTAXES",
+        "CharLSWASM",
+        "getNearLossless",
     )
     for token in required_tokens:
         require(token in javascript, f"dicom-importer.js is missing {token!r}")
@@ -292,6 +301,8 @@ def validate_documentation() -> None:
         "CompressionStream",
         "JPEG 2000",
         "OpenJPEG",
+        "JPEG-LS",
+        "CharLS",
         PRODUCTION_SOURCE_URL,
     ):
         require(token in readme, f"powerpoint/README.md is missing {token!r}")
