@@ -17,6 +17,12 @@
     "1.2.840.10008.1.2.4.90",
     "1.2.840.10008.1.2.4.91",
   ]);
+  const JPEGLS_LOSSLESS_TRANSFER_SYNTAX = "1.2.840.10008.1.2.4.80";
+  const JPEGLS_NEAR_LOSSLESS_TRANSFER_SYNTAX = "1.2.840.10008.1.2.4.81";
+  const JPEGLS_TRANSFER_SYNTAXES = new Set([
+    JPEGLS_LOSSLESS_TRANSFER_SYNTAX,
+    JPEGLS_NEAR_LOSSLESS_TRANSFER_SYNTAX,
+  ]);
   const UNCOMPRESSED_TRANSFER_SYNTAXES = new Set([
     IMPLICIT_VR_LITTLE_ENDIAN,
     EXPLICIT_VR_LITTLE_ENDIAN,
@@ -109,6 +115,7 @@
 
   const databaseReady = openDatabase().catch(() => null);
   let openJpegModulePromise = null;
+  let charLsModulePromise = null;
 
   function abortIfRequested(signal) {
     if (signal?.aborted) throw new DOMException("Import canceled.", "AbortError");
@@ -373,29 +380,61 @@
   function supportedRecordReason(meta) {
     const transferSyntax = safeText(meta, "transferSyntaxUID") || EXPLICIT_VR_LITTLE_ENDIAN;
     const isJpeg2000 = JPEG2000_TRANSFER_SYNTAXES.has(transferSyntax);
-    if (!UNCOMPRESSED_TRANSFER_SYNTAXES.has(transferSyntax) && !isJpeg2000) {
+    const isJpegLs = JPEGLS_TRANSFER_SYNTAXES.has(transferSyntax);
+    const isEncapsulated = isJpeg2000 || isJpegLs;
+    if (!UNCOMPRESSED_TRANSFER_SYNTAXES.has(transferSyntax) && !isEncapsulated) {
       return `compressed or unsupported transfer syntax (${transferSyntax})`;
     }
     if (meta.pixelOffset == null || meta.pixelLength == null) return "missing Pixel Data";
-    if (isJpeg2000 && meta.pixelLength !== 0xffffffff) return "JPEG 2000 Pixel Data is not encapsulated";
-    if (!isJpeg2000 && meta.pixelLength === 0xffffffff) return "encapsulated Pixel Data requires a supported codec";
+    if (isEncapsulated && meta.pixelLength !== 0xffffffff) {
+      return `${isJpegLs ? "JPEG-LS" : "JPEG 2000"} Pixel Data is not encapsulated`;
+    }
+    if (!isEncapsulated && meta.pixelLength === 0xffffffff) {
+      return "encapsulated Pixel Data requires a supported codec";
+    }
     if (firstNumber(meta.numberOfFrames, 1) !== 1) return "only single-frame images are supported";
+
     const samples = Number(meta.samplesPerPixel || 1);
     const bits = Number(meta.bitsAllocated);
-    if (samples === 1 && ![8, 16].includes(bits)) return `Bits Allocated ${bits}; expected 8 or 16`;
-    if (samples === 3 && bits !== 8) return "RGB must use three 8-bit samples";
+    const bitsStored = Number(meta.bitsStored || bits);
+    const highBit = Number(meta.highBit ?? (bitsStored - 1));
+    const signed = Number(meta.pixelRepresentation || 0) === 1;
+    const photometric = safeText(meta, "photometricInterpretation").toUpperCase();
+
     if (![1, 3].includes(samples)) return `Samples per Pixel ${samples}; expected 1 or 3`;
-    if (isJpeg2000 && bits === 8 && Number(meta.pixelRepresentation || 0) === 1) {
+    if (samples === 1 && ![8, 16].includes(bits)) return `Bits Allocated ${bits}; expected 8 or 16`;
+    if (samples === 3 && bits !== 8) return "color images must use three 8-bit allocated samples";
+    if (!Number.isInteger(bitsStored) || bitsStored < 1 || bitsStored > bits) {
+      return `Bits Stored ${meta.bitsStored}; expected 1-${bits}`;
+    }
+    if (isJpegLs && (bitsStored < 2 || highBit !== bitsStored - 1)) {
+      return `JPEG-LS requires Bits Stored 2-${bits} and High Bit equal to Bits Stored - 1`;
+    }
+    if (isJpeg2000 && bits === 8 && signed) {
       return "signed 8-bit JPEG 2000 is not supported by the local decoder";
     }
-    if (samples === 3 && safeText(meta, "photometricInterpretation").toUpperCase() !== "RGB") {
-      return `color space ${safeText(meta, "photometricInterpretation") || "unknown"}; expected RGB`;
+    if (isJpegLs && samples === 1 && !["MONOCHROME1", "MONOCHROME2"].includes(photometric)) {
+      if (photometric === "PALETTE COLOR") return "JPEG-LS PALETTE COLOR requires lookup-table support";
+      return `JPEG-LS monochrome color space ${photometric || "unknown"}; expected MONOCHROME1 or MONOCHROME2`;
+    }
+    if (isJpegLs && samples === 3) {
+      if (signed) return "JPEG-LS color images must use unsigned samples";
+      if (!["RGB", "YBR_FULL"].includes(photometric)) {
+        return `JPEG-LS color space ${photometric || "unknown"}; expected RGB or YBR_FULL`;
+      }
+      if (bitsStored > 8) return "JPEG-LS color input above 8 Bits Stored is not supported by the RGB8 package format";
+    } else if (samples === 3 && photometric !== "RGB") {
+      return `color space ${photometric || "unknown"}; expected RGB`;
     }
     return null;
   }
 
   function isJpeg2000Record(record) {
     return JPEG2000_TRANSFER_SYNTAXES.has(safeText(record, "transferSyntaxUID"));
+  }
+
+  function isJpegLsRecord(record) {
+    return JPEGLS_TRANSFER_SYNTAXES.has(safeText(record, "transferSyntaxUID"));
   }
 
   async function readSourceBytes(source) {
@@ -499,6 +538,162 @@
     }
   }
 
+
+
+  function codecErrorMessage(error, module) {
+    if (typeof error === "number" && typeof module?.getExceptionMessage === "function") {
+      try {
+        return String(module.getExceptionMessage(error));
+      } catch (_) {
+        // Fall through to the generic representation.
+      }
+    }
+    return error?.message || String(error);
+  }
+
+  function trimJpegEndPadding(bytes) {
+    const end = bytes.byteLength;
+    if (end >= 3 && bytes[end - 1] === 0 && bytes[end - 3] === 0xff && bytes[end - 2] === 0xd9) {
+      return bytes.subarray(0, end - 1);
+    }
+    return bytes;
+  }
+
+  function locateCharLsFile(fileName) {
+    if (typeof document === "undefined" || !fileName.endsWith(".wasm")) return fileName;
+    const scripts = Array.from(document.scripts || []);
+    const codecScript = scripts.find((script) => /\/vendor\/charls\/charlswasm_decode\.js(?:[?#]|$)/.test(script.src));
+    if (codecScript?.src) return new URL(fileName, codecScript.src).href;
+    if (global.location?.href) return new URL(`vendor/charls/${fileName}`, global.location.href).href;
+    return fileName;
+  }
+
+  async function openCharLsModule() {
+    if (!charLsModulePromise) {
+      if (typeof global.CharLSWASM !== "function") {
+        throw new Error("The local JPEG-LS decoder is unavailable.");
+      }
+      const options = { print() {}, printErr() {} };
+      if (typeof document !== "undefined") options.locateFile = locateCharLsFile;
+      charLsModulePromise = Promise.resolve(global.CharLSWASM(options)).catch((error) => {
+        charLsModulePromise = null;
+        throw new Error(`Could not initialize the local JPEG-LS decoder: ${codecErrorMessage(error)}`);
+      });
+    }
+    return charLsModulePromise;
+  }
+
+  async function decodeJpegLs(record) {
+    const sourceBytes = record.sourceBytes || await readSourceBytes(record.source);
+    const encodedFrame = trimJpegEndPadding(extractEncapsulatedSingleFrame(record, sourceBytes));
+    const charLs = await openCharLsModule();
+    let decoder = null;
+    try {
+      decoder = new charLs.JpegLSDecoder();
+      decoder.getEncodedBuffer(encodedFrame.byteLength).set(encodedFrame);
+      decoder.decode();
+
+      const frameInfo = decoder.getFrameInfo();
+      const bitsPerSample = Number(frameInfo.bitsPerSample);
+      const componentCount = Number(frameInfo.componentCount);
+      const interleaveMode = Number(decoder.getInterleaveMode());
+      const nearLossless = Number(decoder.getNearLossless());
+      const expectedWidth = Number(record.columns);
+      const expectedHeight = Number(record.rows);
+      const expectedComponents = Number(record.samplesPerPixel || 1);
+      const expectedBitsStored = Number(record.bitsStored || record.bitsAllocated);
+
+      if (Number(frameInfo.width) !== expectedWidth || Number(frameInfo.height) !== expectedHeight) {
+        throw new Error(`JPEG-LS dimensions are ${frameInfo.width}x${frameInfo.height}; expected ${expectedWidth}x${expectedHeight}.`);
+      }
+      if (componentCount !== expectedComponents) {
+        throw new Error(`JPEG-LS frame has ${componentCount} components; expected ${expectedComponents}.`);
+      }
+      if (!Number.isInteger(bitsPerSample) || bitsPerSample < 2 || bitsPerSample > 16) {
+        throw new Error(`JPEG-LS uses unsupported ${frameInfo.bitsPerSample}-bit samples; expected 2-16.`);
+      }
+      if (bitsPerSample !== expectedBitsStored) {
+        throw new Error(`JPEG-LS precision is ${bitsPerSample} bits; DICOM Bits Stored is ${expectedBitsStored}.`);
+      }
+      if (!Number.isInteger(nearLossless) || nearLossless < 0) {
+        throw new Error(`JPEG-LS returned an invalid NEAR value (${nearLossless}).`);
+      }
+      if (safeText(record, "transferSyntaxUID") === JPEGLS_LOSSLESS_TRANSFER_SYNTAX && nearLossless !== 0) {
+        throw new Error(`JPEG-LS Lossless transfer syntax contains NEAR=${nearLossless}; expected 0.`);
+      }
+      if (componentCount === 3 && ![0, 1, 2].includes(interleaveMode)) {
+        throw new Error(`JPEG-LS returned unsupported interleave mode ${interleaveMode}.`);
+      }
+
+      return {
+        bytes: Uint8Array.from(decoder.getDecodedBuffer()),
+        bitsPerSample,
+        componentCount,
+        interleaveMode,
+        nearLossless,
+      };
+    } catch (error) {
+      throw new Error(`Could not decode JPEG-LS frame: ${codecErrorMessage(error, charLs)}`);
+    } finally {
+      if (decoder && typeof decoder.delete === "function") decoder.delete();
+    }
+  }
+
+  function decodeJpegLsStoredSample(raw, record, bitsPerSample) {
+    const bitsStored = Number(record.bitsStored || bitsPerSample);
+    const mask = (2 ** bitsStored) - 1;
+    let value = raw & mask;
+    if (Number(record.pixelRepresentation || 0) === 1) {
+      const signBit = 2 ** (bitsStored - 1);
+      if (value >= signBit) value -= 2 ** bitsStored;
+    }
+    return value;
+  }
+
+  function normalizeJpegLsColor(bytes, rows, columns, interleaveMode) {
+    const pixelCount = rows * columns;
+    const expectedBytes = pixelCount * 3;
+    if (bytes.byteLength !== expectedBytes) {
+      throw new Error(`JPEG-LS color payload has ${bytes.byteLength} bytes; expected ${expectedBytes}.`);
+    }
+    if (interleaveMode === 1 || interleaveMode === 2) return Uint8Array.from(bytes);
+
+    const output = new Uint8Array(expectedBytes);
+    if (interleaveMode === 0) {
+      for (let pixel = 0; pixel < pixelCount; pixel += 1) {
+        output[pixel * 3] = bytes[pixel];
+        output[pixel * 3 + 1] = bytes[pixelCount + pixel];
+        output[pixel * 3 + 2] = bytes[pixelCount * 2 + pixel];
+      }
+      return output;
+    }
+    throw new Error(`JPEG-LS returned unsupported interleave mode ${interleaveMode}.`);
+  }
+
+  function expandColorPrecisionTo8(bytes, bitsStored) {
+    if (bitsStored === 8) return bytes;
+    const maximum = (2 ** bitsStored) - 1;
+    const output = new Uint8Array(bytes.byteLength);
+    for (let index = 0; index < bytes.byteLength; index += 1) {
+      output[index] = Math.round((bytes[index] & maximum) * 255 / maximum);
+    }
+    return output;
+  }
+
+  function ybrFullToRgb(bytes) {
+    const output = new Uint8Array(bytes.byteLength);
+    const clamp = (value) => Math.max(0, Math.min(255, Math.round(value)));
+    for (let index = 0; index < bytes.byteLength; index += 3) {
+      const y = bytes[index];
+      const cb = bytes[index + 1] - 128;
+      const cr = bytes[index + 2] - 128;
+      output[index] = clamp(y + 1.402 * cr);
+      output[index + 1] = clamp(y - 0.344136 * cb - 0.714136 * cr);
+      output[index + 2] = clamp(y + 1.772 * cb);
+    }
+    return output;
+  }
+
   function scaleStoredValue(raw, record) {
     const slope = firstNumber(record.rescaleSlope, 1);
     const intercept = firstNumber(record.rescaleIntercept, 0);
@@ -510,6 +705,22 @@
   }
 
   async function readMonochromePixels(record) {
+    if (isJpegLsRecord(record)) {
+      const decoded = await decodeJpegLs(record);
+      const expectedPixels = Number(record.rows) * Number(record.columns);
+      const bytesPerSample = decoded.bitsPerSample > 8 ? 2 : 1;
+      if (decoded.bytes.byteLength !== expectedPixels * bytesPerSample) {
+        throw new Error(`JPEG-LS pixel payload has ${decoded.bytes.byteLength} bytes; expected ${expectedPixels * bytesPerSample}.`);
+      }
+      const view = new DataView(decoded.bytes.buffer, decoded.bytes.byteOffset, decoded.bytes.byteLength);
+      const output = new Int16Array(expectedPixels);
+      for (let index = 0; index < expectedPixels; index += 1) {
+        const raw = bytesPerSample === 2 ? view.getUint16(index * 2, true) : view.getUint8(index);
+        output[index] = scaleStoredValue(decodeJpegLsStoredSample(raw, record, decoded.bitsPerSample), record);
+      }
+      record.jpegLsNearLossless = decoded.nearLossless;
+      return output;
+    }
     if (isJpeg2000Record(record)) {
       const decoded = await decodeJpeg2000(record);
       const expectedPixels = Number(record.rows) * Number(record.columns);
@@ -563,6 +774,24 @@
   }
 
   async function readRgbPixels(record) {
+    if (isJpegLsRecord(record)) {
+      const decoded = await decodeJpegLs(record);
+      if (decoded.bitsPerSample > 8) {
+        throw new Error("JPEG-LS color input above 8-bit precision is not supported by the RGB8 package format.");
+      }
+      let pixels = normalizeJpegLsColor(
+        decoded.bytes,
+        Number(record.rows),
+        Number(record.columns),
+        decoded.interleaveMode,
+      );
+      pixels = expandColorPrecisionTo8(pixels, decoded.bitsPerSample);
+      if (safeText(record, "photometricInterpretation").toUpperCase() === "YBR_FULL") {
+        pixels = ybrFullToRgb(pixels);
+      }
+      record.jpegLsNearLossless = decoded.nearLossless;
+      return pixels;
+    }
     if (isJpeg2000Record(record)) {
       const decoded = await decodeJpeg2000(record);
       const expectedBytes = Number(record.rows) * Number(record.columns) * 3;
@@ -764,6 +993,9 @@
         seriesDescription: safeText(first, "seriesDescription"),
         seriesNumber: safeText(first, "seriesNumber"),
         transferSyntaxUID: Array.from(new Set(records.map((item) => safeText(item, "transferSyntaxUID")))).filter(Boolean).join(", "),
+        jpegLsNearLossless: records.some((item) => Number.isFinite(item.jpegLsNearLossless))
+          ? Math.max(...records.map((item) => Number(item.jpegLsNearLossless || 0)))
+          : null,
       },
     };
     manifest.baseUrl = `${LOCAL_PROTOCOL}//${studyId}/series/${seriesId}/`;
@@ -1176,6 +1408,9 @@
       parseDicomBuffer,
       supportedRecordReason,
       sortSeriesRecords,
+      normalizeJpegLsColor,
+      expandColorPrecisionTo8,
+      ybrFullToRgb,
       zipSourcesFromFile,
       bytesToBase64,
       int16LittleEndianBytes,

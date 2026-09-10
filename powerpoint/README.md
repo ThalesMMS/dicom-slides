@@ -47,7 +47,7 @@ selected DICOM files or ZIP
   -> require one Study Instance UID
   -> group by Series Instance UID
   -> spatially sort each series when orientation/position permit
-  -> decode stored pixels, including JPEG 2000 through local OpenJPEG/Wasm
+  -> decode stored pixels, including JPEG 2000 through OpenJPEG/Wasm and JPEG-LS through CharLS/Wasm
   -> apply Rescale Slope/Intercept for monochrome images
   -> convert to Int16 little-endian or RGB8
   -> split each series into 12-slice chunks
@@ -75,6 +75,8 @@ The import-time converter intentionally has a bounded compatibility surface:
 - Explicit VR Big Endian;
 - JPEG 2000 Lossless (`1.2.840.10008.1.2.4.90`);
 - JPEG 2000 (`1.2.840.10008.1.2.4.91`);
+- JPEG-LS Lossless (`1.2.840.10008.1.2.4.80`);
+- JPEG-LS Near-Lossless (`1.2.840.10008.1.2.4.81`);
 - one frame per DICOM file;
 - monochrome images with 8- or 16-bit allocated samples;
 - signed and unsigned stored values;
@@ -82,21 +84,25 @@ The import-time converter intentionally has a bounded compatibility surface:
 - Rescale Slope and Rescale Intercept;
 - MONOCHROME1 inversion;
 - RGB with three 8-bit samples, interleaved or planar;
+- JPEG-LS RGB and YBR_FULL normalization across planar, line, and sample interleave modes;
 - ZIP method 0 (stored) and method 8 (deflate), when the webview provides
   `DecompressionStream('deflate-raw')`.
 
 JPEG 2000 decoding uses the vendored `@cornerstonejs/codec-openjpeg` WebAssembly
-build under its MIT license. The JavaScript, Wasm binary, and license are served
-from `powerpoint/vendor/openjpeg/`; pixel data never leaves the local WebView.
-The vendored decoder cannot preserve negative signed 8-bit JPEG 2000 samples,
-so that specific representation is rejected with an explicit technical reason.
-Unsigned 8-bit and signed/unsigned 16-bit-allocated JPEG 2000 remain supported.
+build. JPEG-LS decoding uses the vendored `@cornerstonejs/codec-charls`/CharLS
+WebAssembly build. JavaScript, Wasm binaries, provenance, hashes, and license
+texts are stored under `powerpoint/vendor/`; pixel data never leaves the local
+WebView. The JPEG-LS path validates codestream dimensions, component count,
+precision, transfer-syntax/NEAR consistency, DICOM signedness, fragment
+padding, and color interleave before creating the normal Int16/RGB8 package.
 
-Other compressed DICOM transfer syntaxes, multiframe objects, palettes, YBR,
-RLE, JPEG, and JPEG-LS are not decoded by the browser importer. Such series are
-skipped with a codec-specific reason. Use the repository's offline
-`tools/convert_study.py` pipeline when another codec is required; it can use
-`gdcmconv`.
+The OpenJPEG decoder cannot preserve negative signed 8-bit JPEG 2000 samples,
+so that specific representation is rejected with an explicit technical reason.
+JPEG-LS color above 8-bit precision and PALETTE COLOR are also rejected because
+the current package format is RGB8 and does not carry palette lookup tables.
+Other compressed transfer syntaxes, multiframe objects, RLE, and classic JPEG
+remain outside the browser importer; `tools/convert_study.py` can use `gdcmconv`
+for those formats.
 
 ## Persistence model
 

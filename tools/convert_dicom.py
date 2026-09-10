@@ -1,14 +1,13 @@
 #!/usr/bin/env python3
-"""Convert one uncompressed DICOM series into a dependency-free browser package.
+"""Convert one DICOM series into a dependency-free browser package.
 
 The generated case contains:
   * gzip-compressed Int16 or RGB8 chunks wrapped in classic JavaScript files;
   * a manifest.js file registered in a small global registry.
 
-Only Python's standard library is used for uncompressed input. Supported input
-is deliberately narrow: Implicit/Explicit VR Little Endian and Explicit VR Big
-Endian, 8/16-bit monochrome or 8-bit RGB, one frame per file. This keeps the
-presentation runtime independent of DICOM parsers and codecs.
+Uncompressed input uses only Python's standard library. Optional conversion
+dependencies decode single-frame JPEG 2000 and JPEG-LS while the generated
+presentation runtime remains independent of DICOM parsers and codecs.
 """
 from __future__ import annotations
 
@@ -100,6 +99,10 @@ GENERIC_CT_PRESETS = {
 JPEG2000_TRANSFER_SYNTAXES = {
     "1.2.840.10008.1.2.4.90",
     "1.2.840.10008.1.2.4.91",
+}
+JPEGLS_TRANSFER_SYNTAXES = {
+    "1.2.840.10008.1.2.4.80",
+    "1.2.840.10008.1.2.4.81",
 }
 
 IMPLICIT_VR_LITTLE_ENDIAN = "1.2.840.10008.1.2"
@@ -408,6 +411,46 @@ def decode_jpeg2000(meta: dict) -> array.array:
     return stored_values_to_int16(values, meta)
 
 
+
+
+def decode_jpegls_array(meta: dict):
+    try:
+        import numpy
+        import pydicom
+        from pydicom.pixels import pixel_array
+    except ImportError as error:
+        raise RuntimeError(
+            "JPEG-LS decoding requires pydicom, NumPy, and pyjpegls during offline conversion"
+        ) from error
+
+    try:
+        decoded = numpy.asarray(pixel_array(meta["path"], raw=False))
+    except Exception as error:
+        raise ValueError(f"Could not decode JPEG-LS frame: {error}") from error
+
+    rows = int(meta["rows"])
+    columns = int(meta["columns"])
+    samples = int(meta.get("samplesPerPixel", 1))
+    expected_shape = (rows, columns) if samples == 1 else (rows, columns, samples)
+    if decoded.shape != expected_shape:
+        raise ValueError(f"JPEG-LS decoded shape is {decoded.shape}; expected {expected_shape}")
+    return decoded
+
+
+def decode_jpegls_monochrome(meta: dict) -> array.array:
+    decoded = decode_jpegls_array(meta)
+    return stored_values_to_int16(decoded.reshape(-1).tolist(), meta)
+
+
+def decode_jpegls_rgb(meta: dict) -> bytes:
+    decoded = decode_jpegls_array(meta)
+    if int(meta.get("samplesPerPixel", 1)) != 3 or int(meta["bitsAllocated"]) != 8:
+        raise ValueError("JPEG-LS RGB input must use three 8-bit allocated samples per pixel")
+    if decoded.dtype.kind not in {"u", "i"} or decoded.min() < 0 or decoded.max() > 255:
+        raise ValueError(f"JPEG-LS RGB decoder returned unsupported sample range {decoded.min()}..{decoded.max()}")
+    return decoded.astype("uint8", copy=False).tobytes(order="C")
+
+
 def read_hu(meta: dict) -> array.array:
     transfer_syntax = str(meta.get("transferSyntaxUID", "1.2.840.10008.1.2.1")).strip()
     if int(first_number(meta.get("numberOfFrames"), 1)) != 1:
@@ -420,6 +463,8 @@ def read_hu(meta: dict) -> array.array:
         raise ValueError("Only monochrome input is supported")
     if transfer_syntax in JPEG2000_TRANSFER_SYNTAXES:
         return decode_jpeg2000(meta)
+    if transfer_syntax in JPEGLS_TRANSFER_SYNTAXES:
+        return decode_jpegls_monochrome(meta)
     if transfer_syntax not in UNCOMPRESSED_TRANSFER_SYNTAXES:
         raise ValueError(f"Compressed or unsupported transfer syntax: {transfer_syntax}")
 
@@ -450,6 +495,8 @@ def read_hu(meta: dict) -> array.array:
 
 def read_rgb(meta: dict) -> bytes:
     transfer_syntax = str(meta.get("transferSyntaxUID", "1.2.840.10008.1.2.1")).strip()
+    if transfer_syntax in JPEGLS_TRANSFER_SYNTAXES:
+        return decode_jpegls_rgb(meta)
     if transfer_syntax not in UNCOMPRESSED_TRANSFER_SYNTAXES:
         raise ValueError(f"Compressed or unsupported transfer syntax: {transfer_syntax}")
     if int(first_number(meta.get("numberOfFrames"), 1)) != 1:
